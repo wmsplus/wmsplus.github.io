@@ -31,6 +31,36 @@
         formMsg.textContent = '';
     }
 
+    // Re-encodes the photo to a smaller JPEG before upload -- iPhone photos
+    // (often several MB of HEIC) were failing mid-upload on mobile networks
+    // with a generic "Load failed". Downscaling + re-compressing client-side
+    // fixes both the wait and the failure rate. If decoding fails for any
+    // reason (unsupported format, old browser), falls back to the original
+    // file untouched rather than blocking the submission.
+    async function compressImage(file) {
+        try {
+            const bitmap = await createImageBitmap(file);
+            const maxSide = 1600;
+            const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+            const width = Math.round(bitmap.width * scale);
+            const height = Math.round(bitmap.height * scale);
+
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            canvas.getContext('2d').drawImage(bitmap, 0, 0, width, height);
+            bitmap.close();
+
+            const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.82));
+            if (!blob) return file;
+
+            const baseName = file.name.replace(/\.[^.]+$/, '') || 'photo';
+            return new File([blob], baseName + '.jpg', { type: 'image/jpeg' });
+        } catch (err) {
+            return file;
+        }
+    }
+
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
         clearMsg();
@@ -42,21 +72,25 @@
         const employeeId = document.getElementById('employeeId').value;
         const category = document.getElementById('category').value;
         const photoInput = document.getElementById('photo');
-        const file = photoInput.files[0];
+        const originalFile = photoInput.files[0];
 
-        if (!itemText || !employeeId || !category || !file) {
+        if (!itemText || !employeeId || !category || !originalFile) {
             showMsg('Заполните все поля.', true);
             return;
         }
 
         submitBtn.disabled = true;
-        showMsg('Отправка...', false);
+        showMsg('Сжимаем фото...', false);
+
+        const file = await compressImage(originalFile);
 
         if (file.size > 8 * 1024 * 1024) {
             showMsg('Фото слишком большое (максимум 8 МБ).', true);
             submitBtn.disabled = false;
             return;
         }
+
+        showMsg('Отправка...', false);
 
         try {
             const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
