@@ -31,6 +31,33 @@
         formMsg.textContent = '';
     }
 
+    function wait(ms) {
+        return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    // "Load failed" (Safari's generic network-error message) turned out to
+    // keep happening intermittently even after compression -- the classic
+    // signature of a flaky mobile connection or iOS pausing/killing an
+    // in-flight request when the tab is backgrounded (screen lock, app
+    // switch), not a code bug. Retrying a couple of times with a short
+    // pause recovers from exactly that kind of transient failure, instead
+    // of making the user re-fill and resubmit the whole form by hand.
+    async function withRetry(attempts, statusPrefix, fn) {
+        let lastError;
+        for (let i = 0; i < attempts; i++) {
+            if (i > 0) {
+                showMsg(statusPrefix + ' (попытка ' + (i + 1) + ' из ' + attempts + ')...', false);
+                await wait(1500);
+            }
+            try {
+                return await fn();
+            } catch (err) {
+                lastError = err;
+            }
+        }
+        throw lastError;
+    }
+
     // Re-encodes the photo to a smaller JPEG before upload -- iPhone photos
     // (often several MB of HEIC) were failing mid-upload on mobile networks
     // with a generic "Load failed". Downscaling + re-compressing client-side
@@ -90,32 +117,36 @@
             return;
         }
 
-        showMsg('Отправка...', false);
-
         try {
             const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
             const photoPath = Date.now() + '-' + crypto.randomUUID() + '.' + ext;
 
-            const { error: uploadError } = await supabaseClient.storage
-                .from('intake-photos')
-                .upload(photoPath, file, { contentType: file.type || 'image/jpeg' });
-            if (uploadError) throw uploadError;
+            await withRetry(3, 'Загрузка фото', async () => {
+                showMsg('Загрузка фото...', false);
+                const { error } = await supabaseClient.storage
+                    .from('intake-photos')
+                    .upload(photoPath, file, { contentType: file.type || 'image/jpeg' });
+                if (error) throw error;
+            });
 
-            const { error: insertError } = await supabaseClient
-                .from('intake_submissions')
-                .insert({
-                    item_text: itemText,
-                    employee_id: Number(employeeId),
-                    category: category,
-                    photo_path: photoPath,
-                });
-            if (insertError) throw insertError;
+            await withRetry(3, 'Сохранение', async () => {
+                showMsg('Сохранение...', false);
+                const { error } = await supabaseClient
+                    .from('intake_submissions')
+                    .insert({
+                        item_text: itemText,
+                        employee_id: Number(employeeId),
+                        category: category,
+                        photo_path: photoPath,
+                    });
+                if (error) throw error;
+            });
 
             form.reset();
             form.style.display = 'none';
             successScreen.classList.add('is-visible');
         } catch (err) {
-            showMsg('Не получилось отправить: ' + (err.message || 'ошибка сети'), true);
+            showMsg('Не получилось отправить (проверьте связь и попробуйте ещё раз): ' + (err.message || 'ошибка сети'), true);
             submitBtn.disabled = false;
         }
     });
