@@ -245,11 +245,6 @@
             let photoPath = null;
 
             if (rawFile) {
-                if (rawFile.size > 8 * 1024 * 1024) {
-                    photoMsg.textContent = 'Фото слишком большое (максимум 8 МБ).';
-                    photoMsg.className = 'msg is-error';
-                    return;
-                }
                 photoMsg.textContent = 'Сжимаем фото...';
                 const file = await compressImage(rawFile);
                 if (file.size > 8 * 1024 * 1024) {
