@@ -11,6 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="Приём товара">
 <meta name="theme-color" content="#623CEA">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <style>
     :root {
         --bg: #DED4FF;
@@ -225,8 +226,19 @@
     </div>
 </section>
 
+<section id="screenItemType" class="screen">
+    <div id="areaPillType" class="area-pill"><span id="areaPillTypeText"></span> ✎</div>
+    <div class="screen-card" style="text-align:center;">
+        <h1>Выберите тип товара</h1>
+        <button class="area-btn type-btn" data-type="Мелкий товар" type="button">Мелкий товар</button>
+        <button class="area-btn type-btn" data-type="КГТ" type="button">КГТ</button>
+        <button class="area-btn type-btn" data-type="Шредер" type="button">Шредер</button>
+    </div>
+</section>
+
 <section id="screenCategory" class="screen">
     <div id="areaPillCategory" class="area-pill"><span id="areaPillCategoryText"></span> ✎</div>
+    <button id="backToTypeBtn" class="back-btn" type="button">←</button>
     <div style="width:100%; max-width:420px;">
         <h1>Выберите категорию</h1>
         <div id="categoryGrid" class="category-grid"></div>
@@ -252,8 +264,19 @@
         <h1>Фото</h1>
         <input id="photoInput" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" style="display:none;">
         <button id="photoPickBtn" class="photo-btn" type="button">📷 Выбрать фото</button>
-        <button id="skipPhotoBtn" class="secondary-btn" type="button">Пропустить</button>
         <div id="photoMsg" class="msg"></div>
+    </div>
+</section>
+
+<section id="screenStickerScan" class="screen">
+    <div id="areaPillSticker" class="area-pill"><span id="areaPillStickerText"></span> ✎</div>
+    <button id="backToPhotoFromScanBtn" class="back-btn" type="button">←</button>
+    <div class="screen-card" style="text-align:center;">
+        <h1>Отсканируйте стикер</h1>
+        <p style="margin:0 0 16px;font-size:14px;">Надёжно упакуйте товар, наклейте пустой стикер и наведите камеру на его QR-код.</p>
+        <video id="qrVideo" playsinline muted style="width:100%;max-width:320px;border-radius:var(--radius-md);background:#000;"></video>
+        <canvas id="qrCanvas" style="display:none;"></canvas>
+        <div id="stickerMsg" class="msg"></div>
     </div>
 </section>
 

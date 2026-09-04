@@ -23,7 +23,6 @@
         { name: 'Посуда', emoji: '🍽️' },
         { name: 'Еда', emoji: '🍎' },
         { name: 'Посылка', emoji: '📦' },
-        { name: 'КГТ', emoji: '📏' },
     ];
 
     const LS_EMPLOYEE_ID = 'wmsplus_intake_employee_id';
@@ -90,14 +89,20 @@
         employeeId: localStorage.getItem(LS_EMPLOYEE_ID),
         fullName: localStorage.getItem(LS_FULL_NAME),
         area: localStorage.getItem(LS_AREA),
+        itemType: null,
         category: null,
         itemText: null,
+        photoPath: null,
+        stickerCode: null,
     };
+    let photoBackTarget = 'screenCategory';
+    let qrStream = null;
+    let qrAnimFrame = null;
 
     function updateAreaPills() {
-        document.getElementById('areaPillCategoryText').textContent = state.area || '';
-        document.getElementById('areaPillNameText').textContent = state.area || '';
-        document.getElementById('areaPillPhotoText').textContent = state.area || '';
+        ['areaPillTypeText', 'areaPillCategoryText', 'areaPillNameText', 'areaPillPhotoText', 'areaPillStickerText'].forEach((id) => {
+            document.getElementById(id).textContent = state.area || '';
+        });
     }
 
     function goToStart() {
@@ -107,7 +112,7 @@
             showScreen('screenArea');
         } else {
             updateAreaPills();
-            showScreen('screenCategory');
+            showScreen('screenItemType');
         }
     }
 
@@ -146,7 +151,7 @@
         nameMsg.className = 'msg';
         if (state.area) {
             updateAreaPills();
-            showScreen('screenCategory');
+            showScreen('screenItemType');
         } else {
             showScreen('screenArea');
         }
@@ -155,12 +160,15 @@
     nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitName(); });
 
     // ---------- Screen: area ----------
-    document.querySelectorAll('.area-btn').forEach((btn) => {
+    // Scoped to #screenArea: .area-btn is reused (for visual style only) by
+    // the type-selection buttons on screenItemType, which are NOT area
+    // buttons and must not trigger this handler (they have no data-area).
+    document.querySelectorAll('#screenArea .area-btn').forEach((btn) => {
         btn.addEventListener('click', () => {
             state.area = btn.dataset.area;
             localStorage.setItem(LS_AREA, state.area);
             updateAreaPills();
-            showScreen('screenCategory');
+            showScreen('screenItemType');
         });
     });
     document.getElementById('changeUserBtn').addEventListener('click', () => {
@@ -176,9 +184,28 @@
     });
 
     // ---------- Area pill (pencil) on wizard screens ----------
-    ['areaPillCategory', 'areaPillName', 'areaPillPhoto'].forEach((id) => {
-        document.getElementById(id).addEventListener('click', () => showScreen('screenArea'));
+    ['areaPillType', 'areaPillCategory', 'areaPillName', 'areaPillPhoto', 'areaPillSticker'].forEach((id) => {
+        document.getElementById(id).addEventListener('click', () => {
+            stopQrScan();
+            showScreen('screenArea');
+        });
     });
+
+    // ---------- Wizard step 0: item type ----------
+    document.querySelectorAll('.type-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            state.itemType = btn.dataset.type;
+            if (state.itemType === 'Шредер') {
+                state.category = null;
+                state.itemText = null;
+                photoBackTarget = 'screenItemType';
+                showScreen('screenPhoto');
+            } else {
+                showScreen('screenCategory');
+            }
+        });
+    });
+    document.getElementById('backToTypeBtn').addEventListener('click', () => showScreen('screenItemType'));
 
     // ---------- Wizard step 1: category grid ----------
     const categoryGrid = document.getElementById('categoryGrid');
@@ -193,10 +220,16 @@
             state.category = cat.name;
             document.getElementById('selectedCategoryLine').innerHTML =
                 '<span class="emoji">' + cat.emoji + '</span><span>' + cat.name + '</span>';
-            itemNameInput.value = '';
-            itemNameMsg.textContent = '';
-            itemNameMsg.className = 'msg';
-            showScreen('screenItemName');
+            if (cat.name === 'Посылка') {
+                state.itemText = null;
+                photoBackTarget = 'screenCategory';
+                showScreen('screenPhoto');
+            } else {
+                itemNameInput.value = '';
+                itemNameMsg.textContent = '';
+                itemNameMsg.className = 'msg';
+                showScreen('screenItemName');
+            }
         });
         categoryGrid.appendChild(btn);
     });
@@ -212,6 +245,7 @@
         state.itemText = val;
         itemNameMsg.textContent = '';
         itemNameMsg.className = 'msg';
+        photoBackTarget = 'screenItemName';
         photoMsg.textContent = '';
         photoMsg.className = 'msg';
         showScreen('screenPhoto');
@@ -224,50 +258,116 @@
     const photoInput = document.getElementById('photoInput');
     const photoMsg = document.getElementById('photoMsg');
     const photoPickBtn = document.getElementById('photoPickBtn');
-    const skipPhotoBtn = document.getElementById('skipPhotoBtn');
-    document.getElementById('backToNameBtn').addEventListener('click', () => showScreen('screenItemName'));
+    document.getElementById('backToNameBtn').addEventListener('click', () => showScreen(photoBackTarget));
 
     photoPickBtn.addEventListener('click', () => photoInput.click());
     photoInput.addEventListener('change', () => {
         const file = photoInput.files[0];
-        if (file) submitEntry(file);
+        if (file) handlePhoto(file);
     });
-    skipPhotoBtn.addEventListener('click', () => submitEntry(null));
 
-    async function submitEntry(rawFile) {
+    async function handlePhoto(rawFile) {
         // Honeypot: bots fill every field, real users never see or fill this one.
         if (document.getElementById('c_addr_2').value) return;
 
         photoPickBtn.disabled = true;
-        skipPhotoBtn.disabled = true;
         photoMsg.className = 'msg';
         photoMsg.textContent = '';
 
         try {
-            let photoPath = null;
-
-            if (rawFile) {
-                photoMsg.textContent = 'Сжимаем фото...';
-                const file = await compressImage(rawFile);
-                if (file.size > 8 * 1024 * 1024) {
-                    photoMsg.textContent = 'Фото слишком большое (максимум 8 МБ).';
-                    photoMsg.className = 'msg is-error';
-                    return;
-                }
-                const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
-                photoPath = Date.now() + '-' + crypto.randomUUID() + '.' + ext;
-
-                await withRetry(3, 'Загрузка фото', (m) => { photoMsg.textContent = m; }, async () => {
-                    photoMsg.textContent = 'Загрузка фото...';
-                    const { error } = await supabaseClient.storage
-                        .from('intake-photos')
-                        .upload(photoPath, file, { contentType: file.type || 'image/jpeg' });
-                    if (error) throw error;
-                });
+            photoMsg.textContent = 'Сжимаем фото...';
+            const file = await compressImage(rawFile);
+            if (file.size > 8 * 1024 * 1024) {
+                photoMsg.textContent = 'Фото слишком большое (максимум 8 МБ).';
+                photoMsg.className = 'msg is-error';
+                return;
             }
+            const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+            const photoPath = Date.now() + '-' + crypto.randomUUID() + '.' + ext;
 
-            await withRetry(3, 'Сохранение', (m) => { photoMsg.textContent = m; }, async () => {
-                photoMsg.textContent = 'Сохранение...';
+            await withRetry(3, 'Загрузка фото', (m) => { photoMsg.textContent = m; }, async () => {
+                photoMsg.textContent = 'Загрузка фото...';
+                const { error } = await supabaseClient.storage
+                    .from('intake-photos')
+                    .upload(photoPath, file, { contentType: file.type || 'image/jpeg' });
+                if (error) throw error;
+            });
+
+            state.photoPath = photoPath;
+
+            if (state.itemType === 'Шредер') {
+                showScreen('screenStickerScan');
+                startQrScan();
+            } else {
+                await finalizeSubmit(photoMsg);
+            }
+        } catch (err) {
+            photoMsg.textContent = 'Не получилось отправить (проверьте связь и попробуйте ещё раз): ' + (err.message || 'ошибка сети');
+            photoMsg.className = 'msg is-error';
+        } finally {
+            photoPickBtn.disabled = false;
+            photoInput.value = '';
+        }
+    }
+
+    // ---------- Wizard step 4 (Шредер only): sticker QR scan ----------
+    const stickerMsg = document.getElementById('stickerMsg');
+
+    function stopQrScan() {
+        if (qrAnimFrame) {
+            cancelAnimationFrame(qrAnimFrame);
+            qrAnimFrame = null;
+        }
+        if (qrStream) {
+            qrStream.getTracks().forEach((t) => t.stop());
+            qrStream = null;
+        }
+    }
+
+    async function startQrScan() {
+        stickerMsg.textContent = '';
+        stickerMsg.className = 'msg';
+        const video = document.getElementById('qrVideo');
+        try {
+            qrStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+            video.srcObject = qrStream;
+            await video.play();
+            qrAnimFrame = requestAnimationFrame(scanQrFrame);
+        } catch (err) {
+            stickerMsg.textContent = 'Не удалось открыть камеру: ' + (err.message || 'нет доступа');
+            stickerMsg.className = 'msg is-error';
+        }
+    }
+
+    function scanQrFrame() {
+        const video = document.getElementById('qrVideo');
+        const canvas = document.getElementById('qrCanvas');
+        if (video.readyState === video.HAVE_ENOUGH_DATA) {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const code = jsQR(imageData.data, imageData.width, imageData.height);
+            if (code && code.data) {
+                stopQrScan();
+                state.stickerCode = code.data;
+                finalizeSubmit(stickerMsg);
+                return;
+            }
+        }
+        qrAnimFrame = requestAnimationFrame(scanQrFrame);
+    }
+
+    document.getElementById('backToPhotoFromScanBtn').addEventListener('click', () => {
+        stopQrScan();
+        showScreen('screenPhoto');
+    });
+
+    async function finalizeSubmit(msgEl) {
+        try {
+            await withRetry(3, 'Сохранение', (m) => { msgEl.textContent = m; }, async () => {
+                msgEl.textContent = 'Сохранение...';
                 const { error } = await supabaseClient
                     .from('intake_submissions')
                     .insert({
@@ -275,27 +375,27 @@
                         employee_id: Number(state.employeeId),
                         full_name: state.fullName,
                         area: state.area,
+                        item_type: state.itemType,
                         category: state.category,
-                        photo_path: photoPath,
+                        photo_path: state.photoPath,
+                        sticker_code: state.stickerCode,
                     });
                 if (error) throw error;
             });
-
             showScreen('screenSuccess');
         } catch (err) {
-            photoMsg.textContent = 'Не получилось отправить (проверьте связь и попробуйте ещё раз): ' + (err.message || 'ошибка сети');
-            photoMsg.className = 'msg is-error';
-        } finally {
-            photoPickBtn.disabled = false;
-            skipPhotoBtn.disabled = false;
-            photoInput.value = '';
+            msgEl.textContent = 'Не получилось отправить (проверьте связь и попробуйте ещё раз): ' + (err.message || 'ошибка сети');
+            msgEl.className = 'msg is-error';
         }
     }
 
     document.getElementById('againBtn').addEventListener('click', () => {
+        state.itemType = null;
         state.category = null;
         state.itemText = null;
-        showScreen('screenCategory');
+        state.photoPath = null;
+        state.stickerCode = null;
+        showScreen('screenItemType');
     });
 
     goToStart();
