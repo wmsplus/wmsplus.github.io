@@ -32,11 +32,12 @@
         display: none;
         flex-direction: column;
         align-items: center;
-        justify-content: center;
-        min-height: 100dvh;
+        justify-content: safe center;
+        height: 100dvh;
         width: 100%;
         padding: 24px 20px;
         position: relative;
+        overflow-y: auto;
     }
     .screen.is-active { display: flex; }
     .screen-card {
@@ -104,8 +105,8 @@
 
     .area-pill {
         position: fixed;
-        top: 14px;
-        left: 14px;
+        top: calc(14px + env(safe-area-inset-top));
+        left: calc(14px + env(safe-area-inset-left));
         display: flex;
         align-items: center;
         gap: 6px;
@@ -122,8 +123,8 @@
 
     .back-btn {
         position: fixed;
-        top: 14px;
-        right: 14px;
+        top: calc(14px + env(safe-area-inset-top));
+        right: calc(14px + env(safe-area-inset-right));
         width: 38px;
         height: 38px;
         border-radius: 50%;
@@ -199,7 +200,7 @@
 <section id="screenId" class="screen">
     <div class="screen-card">
         <h1>Введите ваш ID</h1>
-        <input id="idInput" class="field" type="number" inputmode="numeric" min="1" placeholder="Табельный номер">
+        <input id="idInput" class="field" type="number" inputmode="numeric" min="1" placeholder="Табельный номер" aria-label="Табельный номер">
         <button id="idNextBtn" class="primary-btn" type="button">Далее</button>
         <div id="idMsg" class="msg"></div>
     </div>
@@ -208,7 +209,7 @@
 <section id="screenName" class="screen">
     <div class="screen-card">
         <h1>Введите ваше ФИО</h1>
-        <input id="nameInput" class="field" type="text" maxlength="200" placeholder="Фамилия Имя Отчество">
+        <input id="nameInput" class="field" type="text" maxlength="200" placeholder="Фамилия Имя Отчество" aria-label="ФИО">
         <button id="nameNextBtn" class="primary-btn" type="button">Далее</button>
         <div id="nameMsg" class="msg"></div>
     </div>
@@ -238,7 +239,7 @@
     <div class="screen-card">
         <div id="selectedCategoryLine" class="selected-category"></div>
         <h1>Наименование</h1>
-        <input id="itemNameInput" class="field" type="text" maxlength="2000" placeholder="Что за товар">
+        <input id="itemNameInput" class="field" type="text" maxlength="2000" placeholder="Что за товар" aria-label="Наименование товара">
         <button id="itemNameNextBtn" class="primary-btn" type="button">Далее</button>
         <div id="itemNameMsg" class="msg"></div>
     </div>

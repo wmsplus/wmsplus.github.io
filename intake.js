@@ -212,6 +212,8 @@
         state.itemText = val;
         itemNameMsg.textContent = '';
         itemNameMsg.className = 'msg';
+        photoMsg.textContent = '';
+        photoMsg.className = 'msg';
         showScreen('screenPhoto');
     }
     document.getElementById('itemNameNextBtn').addEventListener('click', submitItemName);
