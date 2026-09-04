@@ -91,7 +91,7 @@
 </head>
 <body>
 <div class="card">
-    <form id="intakeForm">
+    <form id="intakeForm" onsubmit="return false;">
         <h1>Приём товара</h1>
 
         <label for="itemText">Описание товара</label>
@@ -101,6 +101,7 @@
         <input id="employeeId" class="field" type="number" inputmode="numeric" required>
 
         <label for="category">Категория</label>
+        <!-- Must match the category list in supabase/migrations/202609040001_intake_submissions.sql exactly -->
         <select id="category" class="field" required>
             <option value="" disabled selected>Выберите категорию</option>
             <option>Одежда</option>
@@ -119,9 +120,9 @@
         </select>
 
         <label for="photo">Фото</label>
-        <input id="photo" class="field" type="file" accept="image/*" required>
+        <input id="photo" class="field" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" required>
 
-        <input type="text" name="website" id="hpField" class="honeypot" autocomplete="off" tabindex="-1" aria-hidden="true">
+        <input type="text" name="c_addr_2" id="c_addr_2" class="honeypot" autocomplete="off" tabindex="-1" aria-hidden="true">
 
         <button type="submit" id="submitBtn">Отправить</button>
         <div id="formMsg" class="msg"></div>
