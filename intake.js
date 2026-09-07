@@ -281,6 +281,16 @@
         photoMsg.className = 'msg';
         photoMsg.textContent = '';
 
+        // Check jsQR availability before spending an upload on a Шредер
+        // submission that can't proceed to the scan step anyway.
+        if (state.itemType === 'Шредер' && typeof jsQR === 'undefined') {
+            photoMsg.textContent = 'Не удалось загрузить сканер QR. Проверьте подключение к интернету и обновите страницу.';
+            photoMsg.className = 'msg is-error';
+            photoPickBtn.disabled = false;
+            photoInput.value = '';
+            return;
+        }
+
         try {
             photoMsg.textContent = 'Сжимаем фото...';
             const file = await compressImage(rawFile);
@@ -373,6 +383,7 @@
             if (code && code.data) {
                 stopQrScan();
                 state.stickerCode = code.data;
+                document.getElementById('backToPhotoFromScanBtn').disabled = true;
                 finalizeSubmit(stickerMsg);
                 return;
             }
@@ -382,8 +393,11 @@
 
     document.getElementById('backToPhotoFromScanBtn').addEventListener('click', () => {
         stopQrScan();
+        clearPhotoMsg();
         showScreen('screenPhoto');
     });
+
+    document.getElementById('retryQrScanBtn').addEventListener('click', () => startQrScan());
 
     async function finalizeSubmit(msgEl) {
         try {
@@ -407,6 +421,8 @@
         } catch (err) {
             msgEl.textContent = 'Не получилось отправить (проверьте связь и попробуйте ещё раз): ' + (err.message || 'ошибка сети');
             msgEl.className = 'msg is-error';
+            const scanBackBtn = document.getElementById('backToPhotoFromScanBtn');
+            if (scanBackBtn) scanBackBtn.disabled = false;
         }
     }
 
