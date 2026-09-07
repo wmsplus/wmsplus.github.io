@@ -417,6 +417,8 @@
                     });
                 if (error) throw error;
             });
+            const scanBackBtn = document.getElementById('backToPhotoFromScanBtn');
+            if (scanBackBtn) scanBackBtn.disabled = false;
             showScreen('screenSuccess');
         } catch (err) {
             msgEl.textContent = 'Не получилось отправить (проверьте связь и попробуйте ещё раз): ' + (err.message || 'ошибка сети');
