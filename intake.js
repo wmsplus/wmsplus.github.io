@@ -98,6 +98,7 @@
     let photoBackTarget = 'screenCategory';
     let qrStream = null;
     let qrAnimFrame = null;
+    let qrScanCancelled = false;
 
     function updateAreaPills() {
         ['areaPillTypeText', 'areaPillCategoryText', 'areaPillNameText', 'areaPillPhotoText', 'areaPillStickerText'].forEach((id) => {
@@ -194,11 +195,13 @@
     // ---------- Wizard step 0: item type ----------
     document.querySelectorAll('.type-btn').forEach((btn) => {
         btn.addEventListener('click', () => {
+            state.stickerCode = null;
             state.itemType = btn.dataset.type;
             if (state.itemType === 'Шредер') {
                 state.category = null;
                 state.itemText = null;
                 photoBackTarget = 'screenItemType';
+                clearPhotoMsg();
                 showScreen('screenPhoto');
             } else {
                 showScreen('screenCategory');
@@ -223,6 +226,7 @@
             if (cat.name === 'Посылка') {
                 state.itemText = null;
                 photoBackTarget = 'screenCategory';
+                clearPhotoMsg();
                 showScreen('screenPhoto');
             } else {
                 itemNameInput.value = '';
@@ -246,8 +250,7 @@
         itemNameMsg.textContent = '';
         itemNameMsg.className = 'msg';
         photoBackTarget = 'screenItemName';
-        photoMsg.textContent = '';
-        photoMsg.className = 'msg';
+        clearPhotoMsg();
         showScreen('screenPhoto');
     }
     document.getElementById('itemNameNextBtn').addEventListener('click', submitItemName);
@@ -258,6 +261,10 @@
     const photoInput = document.getElementById('photoInput');
     const photoMsg = document.getElementById('photoMsg');
     const photoPickBtn = document.getElementById('photoPickBtn');
+    function clearPhotoMsg() {
+        photoMsg.textContent = '';
+        photoMsg.className = 'msg';
+    }
     document.getElementById('backToNameBtn').addEventListener('click', () => showScreen(photoBackTarget));
 
     photoPickBtn.addEventListener('click', () => photoInput.click());
@@ -314,6 +321,7 @@
     const stickerMsg = document.getElementById('stickerMsg');
 
     function stopQrScan() {
+        qrScanCancelled = true;
         if (qrAnimFrame) {
             cancelAnimationFrame(qrAnimFrame);
             qrAnimFrame = null;
@@ -325,15 +333,28 @@
     }
 
     async function startQrScan() {
+        qrScanCancelled = false;
         stickerMsg.textContent = '';
         stickerMsg.className = 'msg';
+        if (typeof jsQR === 'undefined') {
+            stickerMsg.textContent = 'Не удалось загрузить сканер QR. Проверьте подключение к интернету и обновите страницу.';
+            stickerMsg.className = 'msg is-error';
+            return;
+        }
         const video = document.getElementById('qrVideo');
         try {
-            qrStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+            if (qrScanCancelled) {
+                stream.getTracks().forEach((t) => t.stop());
+                return;
+            }
+            qrStream = stream;
             video.srcObject = qrStream;
             await video.play();
+            if (qrScanCancelled) return;
             qrAnimFrame = requestAnimationFrame(scanQrFrame);
         } catch (err) {
+            if (qrScanCancelled) return;
             stickerMsg.textContent = 'Не удалось открыть камеру: ' + (err.message || 'нет доступа');
             stickerMsg.className = 'msg is-error';
         }
