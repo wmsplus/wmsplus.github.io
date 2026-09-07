@@ -41,14 +41,29 @@
         inset: 0;
         overflow-y: auto;
         opacity: 0;
-        transform: translateY(8px);
         pointer-events: none;
-        transition: opacity 180ms ease, transform 180ms ease;
+        /* visibility (not just opacity) keeps inactive screens out of the
+           focus order and away from assistive tech; the 180ms delay lets the
+           fade-out finish before it flips to hidden. */
+        visibility: hidden;
+        transition: opacity 180ms ease, visibility 0s linear 180ms;
     }
     .screen.is-active {
         opacity: 1;
-        transform: translateY(0);
         pointer-events: auto;
+        visibility: visible;
+        transition: opacity 180ms ease, visibility 0s linear 0s;
+    }
+    /* The slide runs on the screen's content, never on .screen itself: any
+       transform on .screen makes it the containing block for its
+       position:fixed children (area pill / shift header / back button), so
+       they would scroll away with .screen's own overflow-y:auto content. */
+    .screen > *:not(.area-pill):not(.shift-header):not(.back-btn) {
+        transform: translateY(8px);
+        transition: transform 180ms ease;
+    }
+    .screen.is-active > *:not(.area-pill):not(.shift-header):not(.back-btn) {
+        transform: translateY(0);
     }
     .screen-card {
         background: var(--card);
@@ -133,9 +148,12 @@
 
     .shift-header {
         position: fixed;
-        top: 14px;
+        /* Own row below the pill/back-button row: at 375px the first row is
+           already full, and the longer night-shift label overlapped both. */
+        top: calc(58px + env(safe-area-inset-top));
         left: 50%;
         transform: translateX(-50%);
+        max-width: calc(100% - 28px);
         font-size: 12px;
         font-weight: 600;
         color: var(--muted);
@@ -143,6 +161,8 @@
         z-index: 9;
         text-align: center;
         white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
     .back-btn {
@@ -217,7 +237,9 @@
     .honeypot { position: absolute; left: -9999px; top: -9999px; opacity: 0; height: 0; }
 
     @media (prefers-reduced-motion: reduce) {
-        .screen { transition: none; }
+        /* No transitions here, so visibility must flip immediately instead of
+           waiting out a delay that no longer matches a running animation. */
+        .screen, .screen.is-active, .screen > * { transition: none; }
     }
 </style>
 </head>
