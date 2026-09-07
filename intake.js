@@ -10,14 +10,24 @@
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJncGhsbG16bWx3dXJmbmJhZ2hvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI5NTQwNzIsImV4cCI6MjA3ODUzMDA3Mn0.a1_Wbtpbs9P-_UDqwjGqAIjvwK5WbT_M3B7g5BHtR2Q';
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    const CATEGORIES = [
+    const CATEGORIES_SMALL = [
         { name: 'Одежда', emoji: '👕' },
         { name: 'Обувь', emoji: '👟' },
         { name: 'Косметика', emoji: '💄' },
         { name: 'Бытовая химия', emoji: '🧴' },
-        { name: 'Мебель', emoji: '🛋️' },
         { name: 'Электроника', emoji: '🔌' },
         { name: 'Ювелирка', emoji: '💍' },
+        { name: 'Для авто', emoji: '🚗' },
+        { name: 'Для животных', emoji: '🐾' },
+        { name: 'Посуда', emoji: '🍽️' },
+        { name: 'Еда', emoji: '🍎' },
+        { name: 'Посылка', emoji: '📦' },
+    ];
+    const CATEGORIES_KGT = [
+        { name: 'Обувь', emoji: '👟' },
+        { name: 'Бытовая химия', emoji: '🧴' },
+        { name: 'Мебель', emoji: '🛋️' },
+        { name: 'Электроника', emoji: '🔌' },
         { name: 'Для авто', emoji: '🚗' },
         { name: 'Для животных', emoji: '🐾' },
         { name: 'Посуда', emoji: '🍽️' },
@@ -101,8 +111,45 @@
     let qrScanCancelled = false;
 
     function updateAreaPills() {
-        ['areaPillTypeText', 'areaPillCategoryText', 'areaPillNameText', 'areaPillPhotoText', 'areaPillStickerText'].forEach((id) => {
+        [
+            'areaPillEntryText', 'areaPillTypeText', 'areaPillCategoryText', 'areaPillNameText',
+            'areaPillPhotoText', 'areaPillStickerText', 'areaPill2ShkText', 'areaPillEmptyText',
+        ].forEach((id) => {
             document.getElementById(id).textContent = state.area || '';
+        });
+    }
+
+    function pad2(n) { return String(n).padStart(2, '0'); }
+    function formatDate(d) { return pad2(d.getDate()) + '.' + pad2(d.getMonth() + 1); }
+
+    function shiftLabel() {
+        const now = new Date();
+        const hour = now.getHours();
+        if (hour >= 8 && hour < 20) {
+            return formatDate(now) + ' · Дневная смена';
+        }
+        let start, end;
+        if (hour >= 20) {
+            start = now;
+            end = new Date(now);
+            end.setDate(end.getDate() + 1);
+        } else {
+            end = now;
+            start = new Date(now);
+            start.setDate(start.getDate() - 1);
+        }
+        return formatDate(start) + '-' + formatDate(end) + ' · Ночная смена';
+    }
+
+    function updateShiftHeaders() {
+        const label = shiftLabel();
+        [
+            'shiftHeaderEntry', 'shiftHeaderType', 'shiftHeaderCategory',
+            'shiftHeaderName', 'shiftHeaderPhoto', 'shiftHeaderSticker',
+            'shiftHeader2Shk', 'shiftHeaderEmpty',
+        ].forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = label;
         });
     }
 
@@ -113,7 +160,8 @@
             showScreen('screenArea');
         } else {
             updateAreaPills();
-            showScreen('screenItemType');
+            updateShiftHeaders();
+            showScreen('screenEntryType');
         }
     }
 
@@ -152,7 +200,8 @@
         nameMsg.className = 'msg';
         if (state.area) {
             updateAreaPills();
-            showScreen('screenItemType');
+            updateShiftHeaders();
+            showScreen('screenEntryType');
         } else {
             showScreen('screenArea');
         }
@@ -161,15 +210,17 @@
     nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitName(); });
 
     // ---------- Screen: area ----------
-    // Scoped to #screenArea: .area-btn is reused (for visual style only) by
-    // the type-selection buttons on screenItemType, which are NOT area
-    // buttons and must not trigger this handler (they have no data-area).
-    document.querySelectorAll('#screenArea .area-btn').forEach((btn) => {
+    // Selected via [data-area] (not the shared .area-btn class, which is
+    // reused for visual style only by the type-selection buttons on
+    // screenItemType and the entry-type buttons on screenEntryType --
+    // those are NOT area buttons and must not trigger this handler).
+    document.querySelectorAll('[data-area]').forEach((btn) => {
         btn.addEventListener('click', () => {
             state.area = btn.dataset.area;
             localStorage.setItem(LS_AREA, state.area);
             updateAreaPills();
-            showScreen('screenItemType');
+            updateShiftHeaders();
+            showScreen('screenEntryType');
         });
     });
     document.getElementById('changeUserBtn').addEventListener('click', () => {
@@ -185,15 +236,42 @@
     });
 
     // ---------- Area pill (pencil) on wizard screens ----------
-    ['areaPillType', 'areaPillCategory', 'areaPillName', 'areaPillPhoto', 'areaPillSticker'].forEach((id) => {
+    [
+        'areaPillEntry', 'areaPillType', 'areaPillCategory', 'areaPillName',
+        'areaPillPhoto', 'areaPillSticker', 'areaPill2Shk', 'areaPillEmpty',
+    ].forEach((id) => {
         document.getElementById(id).addEventListener('click', () => {
             stopQrScan();
             showScreen('screenArea');
         });
     });
 
+    // ---------- Entry-type screen ----------
+    document.querySelectorAll('[data-entry]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const entry = btn.dataset.entry;
+            if (entry === 'no-shk') {
+                showScreen('screenItemType');
+            } else if (entry === 'two-shk') {
+                shkCorrectInput.value = '';
+                shkWrongInput.value = '';
+                shk2Msg.textContent = '';
+                shk2Msg.className = 'msg';
+                showScreen('screen2Shk');
+            } else if (entry === 'empty-package') {
+                shkEmptyInput.value = '';
+                emptyMsg.textContent = '';
+                emptyMsg.className = 'msg';
+                showScreen('screenEmptyPackage');
+            }
+        });
+    });
+    document.getElementById('backToEntryTypeBtn').addEventListener('click', () => showScreen('screenEntryType'));
+    document.getElementById('backToEntryFrom2ShkBtn').addEventListener('click', () => showScreen('screenEntryType'));
+    document.getElementById('backToEntryFromEmptyBtn').addEventListener('click', () => showScreen('screenEntryType'));
+
     // ---------- Wizard step 0: item type ----------
-    document.querySelectorAll('.type-btn').forEach((btn) => {
+    document.querySelectorAll('[data-type]').forEach((btn) => {
         btn.addEventListener('click', () => {
             state.stickerCode = null;
             state.itemType = btn.dataset.type;
@@ -204,6 +282,7 @@
                 clearPhotoMsg();
                 showScreen('screenPhoto');
             } else {
+                renderCategoryGrid(state.itemType === 'КГТ' ? CATEGORIES_KGT : CATEGORIES_SMALL);
                 showScreen('screenCategory');
             }
         });
@@ -214,29 +293,32 @@
     const categoryGrid = document.getElementById('categoryGrid');
     const itemNameInput = document.getElementById('itemNameInput');
     const itemNameMsg = document.getElementById('itemNameMsg');
-    CATEGORIES.forEach((cat) => {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'category-btn';
-        btn.innerHTML = '<span class="category-emoji">' + cat.emoji + '</span><span class="category-label">' + cat.name + '</span>';
-        btn.addEventListener('click', () => {
-            state.category = cat.name;
-            document.getElementById('selectedCategoryLine').innerHTML =
-                '<span class="emoji">' + cat.emoji + '</span><span>' + cat.name + '</span>';
-            if (cat.name === 'Посылка') {
-                state.itemText = null;
-                photoBackTarget = 'screenCategory';
-                clearPhotoMsg();
-                showScreen('screenPhoto');
-            } else {
-                itemNameInput.value = '';
-                itemNameMsg.textContent = '';
-                itemNameMsg.className = 'msg';
-                showScreen('screenItemName');
-            }
+    function renderCategoryGrid(list) {
+        categoryGrid.innerHTML = '';
+        list.forEach((cat) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'category-btn';
+            btn.innerHTML = '<span class="category-emoji">' + cat.emoji + '</span><span class="category-label">' + cat.name + '</span>';
+            btn.addEventListener('click', () => {
+                state.category = cat.name;
+                document.getElementById('selectedCategoryLine').innerHTML =
+                    '<span class="emoji">' + cat.emoji + '</span><span>' + cat.name + '</span>';
+                if (cat.name === 'Посылка') {
+                    state.itemText = null;
+                    photoBackTarget = 'screenCategory';
+                    clearPhotoMsg();
+                    showScreen('screenPhoto');
+                } else {
+                    itemNameInput.value = '';
+                    itemNameMsg.textContent = '';
+                    itemNameMsg.className = 'msg';
+                    showScreen('screenItemName');
+                }
+            });
+            categoryGrid.appendChild(btn);
         });
-        categoryGrid.appendChild(btn);
-    });
+    }
 
     // ---------- Wizard step 2: item name ----------
     function submitItemName() {
@@ -434,8 +516,140 @@
         state.itemText = null;
         state.photoPath = null;
         state.stickerCode = null;
-        showScreen('screenItemType');
+        showScreen('screenEntryType');
     });
+
+    // ---------- Entry-type sub-flows: 2 ШК / Пустая упаковка (write to 2shk_rep) ----------
+    function isDigitsOnly(v) {
+        return /^\d+$/.test(v);
+    }
+
+    function buildPublicPhotoUrl(path) {
+        return 'https://bgphllmzmlwurfnbagho.supabase.co/storage/v1/object/public/intake-photos/' + path;
+    }
+
+    async function uploadCompressedPhoto(rawFile, onStatus) {
+        onStatus('Сжимаем фото...');
+        const file = await compressImage(rawFile);
+        if (file.size > 8 * 1024 * 1024) {
+            throw new Error('Фото слишком большое (максимум 8 МБ).');
+        }
+        const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+        const path = Date.now() + '-' + crypto.randomUUID() + '.' + ext;
+        await withRetry(3, 'Загрузка фото', onStatus, async () => {
+            onStatus('Загрузка фото...');
+            const { error } = await supabaseClient.storage
+                .from('intake-photos')
+                .upload(path, file, { contentType: file.type || 'image/jpeg' });
+            if (error) throw error;
+        });
+        return path;
+    }
+
+    const shkCorrectInput = document.getElementById('shkCorrectInput');
+    const shkWrongInput = document.getElementById('shkWrongInput');
+    const photo2ShkInput = document.getElementById('photo2ShkInput');
+    const photo2ShkPickBtn = document.getElementById('photo2ShkPickBtn');
+    const shk2Msg = document.getElementById('shk2Msg');
+
+    photo2ShkPickBtn.addEventListener('click', () => {
+        const correct = shkCorrectInput.value.trim();
+        const wrong = shkWrongInput.value.trim();
+        if (!isDigitsOnly(correct) || !isDigitsOnly(wrong)) {
+            shk2Msg.textContent = 'ШК должен состоять только из цифр.';
+            shk2Msg.className = 'msg is-error';
+            return;
+        }
+        shk2Msg.textContent = '';
+        shk2Msg.className = 'msg';
+        photo2ShkInput.click();
+    });
+
+    photo2ShkInput.addEventListener('change', () => {
+        const file = photo2ShkInput.files[0];
+        if (file) submit2Shk(file);
+    });
+
+    async function submit2Shk(rawFile) {
+        if (document.getElementById('c_addr_2').value) return;
+        const correct = shkCorrectInput.value.trim();
+        const wrong = shkWrongInput.value.trim();
+        photo2ShkPickBtn.disabled = true;
+        shk2Msg.className = 'msg';
+        try {
+            const path = await uploadCompressedPhoto(rawFile, (m) => { shk2Msg.textContent = m; });
+            await withRetry(3, 'Сохранение', (m) => { shk2Msg.textContent = m; }, async () => {
+                shk2Msg.textContent = 'Сохранение...';
+                const { error } = await supabaseClient.from('2shk_rep').insert({
+                    shk1: correct,
+                    shk2: wrong,
+                    eventtype: 'Два ШК',
+                    media: buildPublicPhotoUrl(path),
+                    wh_id: '50144199',
+                });
+                if (error) throw error;
+            });
+            showScreen('screenSuccess');
+        } catch (err) {
+            shk2Msg.textContent = 'Не получилось отправить (проверьте связь и попробуйте ещё раз): ' + (err.message || 'ошибка сети');
+            shk2Msg.className = 'msg is-error';
+        } finally {
+            photo2ShkPickBtn.disabled = false;
+            photo2ShkInput.value = '';
+        }
+    }
+
+    const shkEmptyInput = document.getElementById('shkEmptyInput');
+    const photoEmptyInput = document.getElementById('photoEmptyInput');
+    const photoEmptyPickBtn = document.getElementById('photoEmptyPickBtn');
+    const emptyMsg = document.getElementById('emptyMsg');
+
+    photoEmptyPickBtn.addEventListener('click', () => {
+        const shk = shkEmptyInput.value.trim();
+        if (!isDigitsOnly(shk)) {
+            emptyMsg.textContent = 'ШК должен состоять только из цифр.';
+            emptyMsg.className = 'msg is-error';
+            return;
+        }
+        emptyMsg.textContent = '';
+        emptyMsg.className = 'msg';
+        photoEmptyInput.click();
+    });
+
+    photoEmptyInput.addEventListener('change', () => {
+        const file = photoEmptyInput.files[0];
+        if (file) submitEmptyPackage(file);
+    });
+
+    async function submitEmptyPackage(rawFile) {
+        if (document.getElementById('c_addr_2').value) return;
+        const shk = shkEmptyInput.value.trim();
+        photoEmptyPickBtn.disabled = true;
+        emptyMsg.className = 'msg';
+        try {
+            const path = await uploadCompressedPhoto(rawFile, (m) => { emptyMsg.textContent = m; });
+            await withRetry(3, 'Сохранение', (m) => { emptyMsg.textContent = m; }, async () => {
+                emptyMsg.textContent = 'Сохранение...';
+                const { error } = await supabaseClient.from('2shk_rep').insert({
+                    shk1: shk,
+                    shk2: ' ',
+                    eventtype: 'Пустая упаковка',
+                    media: buildPublicPhotoUrl(path),
+                    wh_id: '50144199',
+                });
+                if (error) throw error;
+            });
+            showScreen('screenSuccess');
+        } catch (err) {
+            emptyMsg.textContent = 'Не получилось отправить (проверьте связь и попробуйте ещё раз): ' + (err.message || 'ошибка сети');
+            emptyMsg.className = 'msg is-error';
+        } finally {
+            photoEmptyPickBtn.disabled = false;
+            photoEmptyInput.value = '';
+        }
+    }
+
+    setInterval(updateShiftHeaders, 60000);
 
     goToStart();
 })();

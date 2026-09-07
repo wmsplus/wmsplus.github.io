@@ -30,17 +30,26 @@
         html, body { overflow: hidden; }
     }
     .screen {
-        display: none;
+        display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: safe center;
         height: 100dvh;
         width: 100%;
         padding: 24px 20px;
-        position: relative;
+        position: fixed;
+        inset: 0;
         overflow-y: auto;
+        opacity: 0;
+        transform: translateY(8px);
+        pointer-events: none;
+        transition: opacity 180ms ease, transform 180ms ease;
     }
-    .screen.is-active { display: flex; }
+    .screen.is-active {
+        opacity: 1;
+        transform: translateY(0);
+        pointer-events: auto;
+    }
     .screen-card {
         background: var(--card);
         border-radius: var(--radius-lg);
@@ -122,6 +131,20 @@
         z-index: 10;
     }
 
+    .shift-header {
+        position: fixed;
+        top: 14px;
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--muted);
+        opacity: .7;
+        z-index: 9;
+        text-align: center;
+        white-space: nowrap;
+    }
+
     .back-btn {
         position: fixed;
         top: calc(14px + env(safe-area-inset-top));
@@ -192,6 +215,10 @@
     .success p { text-align: center; margin: 0 0 6px; }
 
     .honeypot { position: absolute; left: -9999px; top: -9999px; opacity: 0; height: 0; }
+
+    @media (prefers-reduced-motion: reduce) {
+        .screen { transition: none; }
+    }
 </style>
 </head>
 <body>
@@ -226,8 +253,21 @@
     </div>
 </section>
 
+<section id="screenEntryType" class="screen">
+    <div id="areaPillEntry" class="area-pill"><span id="areaPillEntryText"></span> ✎</div>
+    <div id="shiftHeaderEntry" class="shift-header"></div>
+    <div class="screen-card" style="text-align:center;">
+        <h1>Выберите тип заявки</h1>
+        <button class="area-btn" data-entry="no-shk" type="button">Товар без ШК</button>
+        <button class="area-btn" data-entry="two-shk" type="button">2 ШК на товаре</button>
+        <button class="area-btn" data-entry="empty-package" type="button">Пустая упаковка</button>
+    </div>
+</section>
+
 <section id="screenItemType" class="screen">
     <div id="areaPillType" class="area-pill"><span id="areaPillTypeText"></span> ✎</div>
+    <div id="shiftHeaderType" class="shift-header"></div>
+    <button id="backToEntryTypeBtn" class="back-btn" type="button">←</button>
     <div class="screen-card" style="text-align:center;">
         <h1>Выберите тип товара</h1>
         <button class="area-btn type-btn" data-type="Мелкий товар" type="button">Мелкий товар</button>
@@ -236,8 +276,39 @@
     </div>
 </section>
 
+<section id="screen2Shk" class="screen">
+    <div id="areaPill2Shk" class="area-pill"><span id="areaPill2ShkText"></span> ✎</div>
+    <div id="shiftHeader2Shk" class="shift-header"></div>
+    <button id="backToEntryFrom2ShkBtn" class="back-btn" type="button">←</button>
+    <div class="screen-card">
+        <h1>2 ШК на товаре</h1>
+        <label style="display:block;font-size:13px;font-weight:600;margin:0 0 6px;">Введите верный ШК</label>
+        <input id="shkCorrectInput" class="field" type="text" inputmode="numeric" placeholder="Верный ШК">
+        <label style="display:block;font-size:13px;font-weight:600;margin:14px 0 6px;">Введите неверный ШК</label>
+        <input id="shkWrongInput" class="field" type="text" inputmode="numeric" placeholder="Неверный ШК">
+        <input id="photo2ShkInput" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" style="display:none;">
+        <button id="photo2ShkPickBtn" class="photo-btn" type="button" style="margin-top:16px;">📷 Добавьте фото</button>
+        <div id="shk2Msg" class="msg"></div>
+    </div>
+</section>
+
+<section id="screenEmptyPackage" class="screen">
+    <div id="areaPillEmpty" class="area-pill"><span id="areaPillEmptyText"></span> ✎</div>
+    <div id="shiftHeaderEmpty" class="shift-header"></div>
+    <button id="backToEntryFromEmptyBtn" class="back-btn" type="button">←</button>
+    <div class="screen-card">
+        <h1>Пустая упаковка</h1>
+        <label style="display:block;font-size:13px;font-weight:600;margin:0 0 6px;">Введите ШК</label>
+        <input id="shkEmptyInput" class="field" type="text" inputmode="numeric" placeholder="ШК">
+        <input id="photoEmptyInput" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" style="display:none;">
+        <button id="photoEmptyPickBtn" class="photo-btn" type="button" style="margin-top:16px;">📷 Добавьте фото</button>
+        <div id="emptyMsg" class="msg"></div>
+    </div>
+</section>
+
 <section id="screenCategory" class="screen">
     <div id="areaPillCategory" class="area-pill"><span id="areaPillCategoryText"></span> ✎</div>
+    <div id="shiftHeaderCategory" class="shift-header"></div>
     <button id="backToTypeBtn" class="back-btn" type="button">←</button>
     <div style="width:100%; max-width:420px;">
         <h1>Выберите категорию</h1>
@@ -247,6 +318,7 @@
 
 <section id="screenItemName" class="screen">
     <div id="areaPillName" class="area-pill"><span id="areaPillNameText"></span> ✎</div>
+    <div id="shiftHeaderName" class="shift-header"></div>
     <button id="backToCategoryBtn" class="back-btn" type="button">←</button>
     <div class="screen-card">
         <div id="selectedCategoryLine" class="selected-category"></div>
@@ -259,6 +331,7 @@
 
 <section id="screenPhoto" class="screen">
     <div id="areaPillPhoto" class="area-pill"><span id="areaPillPhotoText"></span> ✎</div>
+    <div id="shiftHeaderPhoto" class="shift-header"></div>
     <button id="backToNameBtn" class="back-btn" type="button">←</button>
     <div class="screen-card" style="text-align:center;">
         <h1>Фото</h1>
@@ -270,6 +343,7 @@
 
 <section id="screenStickerScan" class="screen">
     <div id="areaPillSticker" class="area-pill"><span id="areaPillStickerText"></span> ✎</div>
+    <div id="shiftHeaderSticker" class="shift-header"></div>
     <button id="backToPhotoFromScanBtn" class="back-btn" type="button">←</button>
     <div class="screen-card" style="text-align:center;">
         <h1>Отсканируйте стикер</h1>
