@@ -104,7 +104,22 @@
         itemText: null,
         photoPath: null,
         stickerCode: null,
+        spillFlag: false,
     };
+
+    // Priority when more than one trigger applies to the same item: Шредер
+    // > Бытовая химия (Товар льётся) > участок Упаковка. See spec Part A.1.
+    function needsStickerFlow() {
+        return state.itemType === 'Шредер' || state.area === 'Упаковка' || state.spillFlag;
+    }
+
+    function computeNoShkBucket() {
+        if (state.itemType === 'Шредер') return 'Шредер';
+        if (state.spillFlag) return 'Брак Бытовая химия';
+        if (state.area === 'Упаковка') return 'Товар с переупаковки';
+        return 'Короб смены';
+    }
+
     let photoBackTarget = 'screenCategory';
     let qrStream = null;
     let qrAnimFrame = null;
@@ -121,12 +136,17 @@
 
     function pad2(n) { return String(n).padStart(2, '0'); }
     function formatDate(d) { return pad2(d.getDate()) + '.' + pad2(d.getMonth() + 1); }
+    function isoDate(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
 
-    function shiftLabel() {
+    // Single source of truth for the 8:00/20:00 shift boundary -- both the
+    // header label (formatted for display) and the shift_date/shift_type
+    // saved on every submission (shift boxes, Task 6-7) come from here so
+    // they can never drift apart.
+    function computeShift() {
         const now = new Date();
         const hour = now.getHours();
         if (hour >= 8 && hour < 20) {
-            return formatDate(now) + ' · Дневная смена';
+            return { date: isoDate(now), type: 'Дневная', label: formatDate(now) + ' · Дневная смена' };
         }
         let start, end;
         if (hour >= 20) {
@@ -138,7 +158,11 @@
             start = new Date(now);
             start.setDate(start.getDate() - 1);
         }
-        return formatDate(start) + '-' + formatDate(end) + ' · Ночная смена';
+        return { date: isoDate(start), type: 'Ночная', label: formatDate(start) + '-' + formatDate(end) + ' · Ночная смена' };
+    }
+
+    function shiftLabel() {
+        return computeShift().label;
     }
 
     function updateShiftHeaders() {
@@ -365,7 +389,7 @@
 
         // Check jsQR availability before spending an upload on a Шредер
         // submission that can't proceed to the scan step anyway.
-        if (state.itemType === 'Шредер' && typeof jsQR === 'undefined') {
+        if (needsStickerFlow() && typeof jsQR === 'undefined') {
             photoMsg.textContent = 'Не удалось загрузить сканер QR. Проверьте подключение к интернету и обновите страницу.';
             photoMsg.className = 'msg is-error';
             photoPickBtn.disabled = false;
@@ -394,7 +418,7 @@
 
             state.photoPath = photoPath;
 
-            if (state.itemType === 'Шредер') {
+            if (needsStickerFlow()) {
                 showScreen('screenStickerScan');
                 startQrScan();
             } else {
@@ -483,6 +507,7 @@
 
     async function finalizeSubmit(msgEl) {
         try {
+            const shift = computeShift();
             await withRetry(3, 'Сохранение', (m) => { msgEl.textContent = m; }, async () => {
                 msgEl.textContent = 'Сохранение...';
                 const { error } = await supabaseClient
@@ -496,6 +521,9 @@
                         category: state.category,
                         photo_path: state.photoPath,
                         sticker_code: state.stickerCode,
+                        shift_date: shift.date,
+                        shift_type: shift.type,
+                        no_shk_bucket: computeNoShkBucket(),
                     });
                 if (error) throw error;
             });
@@ -516,6 +544,7 @@
         state.itemText = null;
         state.photoPath = null;
         state.stickerCode = null;
+        state.spillFlag = false;
         showScreen('screenEntryType');
     });
 
