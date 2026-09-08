@@ -63,11 +63,11 @@
        transform on .screen makes it the containing block for its
        position:fixed children (area pill / shift header / back button), so
        they would scroll away with .screen's own overflow-y:auto content. */
-    .screen > *:not(.area-pill):not(.shift-header):not(.back-btn) {
+    .screen > *:not(.area-pill):not(.shift-header):not(.back-btn):not(.shift-counter) {
         transform: translateY(8px);
         transition: transform 180ms ease;
     }
-    .screen.is-active > *:not(.area-pill):not(.shift-header):not(.back-btn) {
+    .screen.is-active > *:not(.area-pill):not(.shift-header):not(.back-btn):not(.shift-counter) {
         transform: translateY(0);
     }
     .screen-card {
@@ -188,6 +188,21 @@
         z-index: 10;
     }
 
+    .shift-counter {
+        position: fixed;
+        bottom: calc(14px + env(safe-area-inset-bottom));
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--muted);
+        background: #fff;
+        border: 1px solid rgba(36,32,56,.12);
+        border-radius: 999px;
+        padding: 6px 14px;
+        z-index: 9;
+    }
+
     .category-grid {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
@@ -251,8 +266,8 @@
            running animation. */
         .screen,
         .screen.is-active,
-        .screen > *:not(.area-pill):not(.shift-header):not(.back-btn),
-        .screen.is-active > *:not(.area-pill):not(.shift-header):not(.back-btn) {
+        .screen > *:not(.area-pill):not(.shift-header):not(.back-btn):not(.shift-counter),
+        .screen.is-active > *:not(.area-pill):not(.shift-header):not(.back-btn):not(.shift-counter) {
             transition: none;
         }
     }
@@ -311,6 +326,7 @@
         <button class="area-btn type-btn" data-type="КГТ" type="button">КГТ</button>
         <button class="area-btn type-btn" data-type="Шредер" type="button">Шредер</button>
     </div>
+    <div class="shift-counter" data-shift-counter></div>
 </section>
 
 <section id="screen2Shk" class="screen">
@@ -351,6 +367,7 @@
         <h1>Выберите категорию</h1>
         <div id="categoryGrid" class="category-grid"></div>
     </div>
+    <div class="shift-counter" data-shift-counter></div>
 </section>
 
 <section id="screenItemName" class="screen">
@@ -365,6 +382,7 @@
         <button id="spillBtn" class="primary-btn" type="button" style="display:none;background:var(--danger);margin-top:10px;">Товар льётся</button>
         <div id="itemNameMsg" class="msg"></div>
     </div>
+    <div class="shift-counter" data-shift-counter></div>
 </section>
 
 <section id="screenPhoto" class="screen">
@@ -377,6 +395,7 @@
         <button id="photoPickBtn" class="photo-btn" type="button">📷 Выбрать фото</button>
         <div id="photoMsg" class="msg"></div>
     </div>
+    <div class="shift-counter" data-shift-counter></div>
 </section>
 
 <section id="screenStickerScan" class="screen">

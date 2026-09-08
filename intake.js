@@ -42,6 +42,31 @@
     const screens = Array.from(document.querySelectorAll('.screen'));
     function showScreen(id) {
         screens.forEach((s) => s.classList.toggle('is-active', s.id === id));
+        void refreshShiftCounter();
+    }
+
+    // Упаковка has no shift-box concept (every item there is bucketed,
+    // never counted into a shift box) -- hide the counter entirely there.
+    async function refreshShiftCounter() {
+        const els = document.querySelectorAll('[data-shift-counter]');
+        if (!els.length) return;
+        if (!state.area || state.area === 'Упаковка') {
+            els.forEach((el) => { el.style.display = 'none'; });
+            return;
+        }
+        const shift = computeShift();
+        const { data, error } = await supabaseClient
+            .from('wms_no_shk_boxes')
+            .select('total_items')
+            .eq('area', state.area)
+            .eq('shift_date', shift.date)
+            .eq('shift_type', shift.type)
+            .eq('outside_opp', true)
+            .maybeSingle();
+        els.forEach((el) => {
+            el.style.display = '';
+            el.textContent = 'За смену зафиксировано: ' + (error || !data ? 0 : data.total_items);
+        });
     }
 
     function wait(ms) {
@@ -656,6 +681,18 @@
             if (state.stickerCode) {
                 showScreen('screenStickerSaved');
             } else {
+                try {
+                    await supabaseClient.rpc('wms_no_shk_box_log_item', {
+                        p_area: state.area,
+                        p_shift_date: shift.date,
+                        p_shift_type: shift.type,
+                        p_full_name: state.fullName,
+                    });
+                } catch (rpcErr) {
+                    // Non-fatal: the submission itself already saved --
+                    // the shift counter is a convenience display, not the
+                    // record of truth.
+                }
                 showScreen('screenSuccess');
             }
         } catch (err) {
