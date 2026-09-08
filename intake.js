@@ -129,7 +129,7 @@
         [
             'areaPillEntryText', 'areaPillTypeText', 'areaPillCategoryText', 'areaPillNameText',
             'areaPillPhotoText', 'areaPillStickerText', 'areaPill2ShkText', 'areaPillEmptyText',
-            'areaPillStickerSavedText', 'areaPillInstrText',
+            'areaPillStickerSavedText', 'areaPillInstrText', 'areaPillHubText',
         ].forEach((id) => {
             document.getElementById(id).textContent = state.area || '';
         });
@@ -254,13 +254,23 @@
         }
     });
 
+    document.getElementById('hubBackBtn').addEventListener('click', () => {
+        state.itemType = null;
+        state.category = null;
+        state.itemText = null;
+        state.photoPath = null;
+        state.stickerCode = null;
+        state.spillFlag = false;
+        showScreen('screenEntryType');
+    });
+
     function updateShiftHeaders() {
         const label = shiftLabel();
         [
             'shiftHeaderEntry', 'shiftHeaderType', 'shiftHeaderCategory',
             'shiftHeaderName', 'shiftHeaderPhoto', 'shiftHeaderSticker',
             'shiftHeader2Shk', 'shiftHeaderEmpty',
-            'shiftHeaderStickerSaved', 'shiftHeaderInstr',
+            'shiftHeaderStickerSaved', 'shiftHeaderInstr', 'shiftHeaderHub',
         ].forEach((id) => {
             const el = document.getElementById(id);
             if (el) el.textContent = label;
@@ -353,7 +363,7 @@
     [
         'areaPillEntry', 'areaPillType', 'areaPillCategory', 'areaPillName',
         'areaPillPhoto', 'areaPillSticker', 'areaPill2Shk', 'areaPillEmpty',
-        'areaPillStickerSaved', 'areaPillInstr',
+        'areaPillStickerSaved', 'areaPillInstr', 'areaPillHub',
     ].forEach((id) => {
         document.getElementById(id).addEventListener('click', () => {
             stopQrScan();
@@ -390,7 +400,11 @@
         btn.addEventListener('click', () => {
             state.stickerCode = null;
             state.itemType = btn.dataset.type;
-            if (state.itemType === 'Шредер') {
+            if (state.itemType === 'Шредер' && state.area === 'Маркетплейс') {
+                state.category = null;
+                state.itemText = null;
+                showScreen('screenTakeToHub');
+            } else if (state.itemType === 'Шредер') {
                 state.category = null;
                 state.itemText = null;
                 photoBackTarget = 'screenItemType';
