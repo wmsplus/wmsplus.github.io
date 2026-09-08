@@ -658,6 +658,30 @@
     async function finalizeSubmit(msgEl) {
         try {
             const shift = computeShift();
+
+            // For shift-box items (no sticker), log into the box FIRST so
+            // the returned box_id can be stamped onto the submission row
+            // itself -- that's the only precise link between a row and
+            // the exact box it landed in (matching by area/shift/date
+            // alone is ambiguous once a box has been through "Принесено"
+            // mid-shift, or against a manually-created box sharing the
+            // same triple). Non-fatal: a failed call here just leaves
+            // box_id null, same as before this call existed.
+            let boxId = null;
+            if (!state.stickerCode) {
+                const { data: rpcData, error: rpcError } = await supabaseClient.rpc('wms_no_shk_box_log_item', {
+                    p_area: state.area,
+                    p_shift_date: shift.date,
+                    p_shift_type: shift.type,
+                    p_full_name: state.fullName,
+                });
+                if (rpcError) {
+                    console.warn('wms_no_shk_box_log_item failed:', rpcError);
+                } else if (rpcData && rpcData[0]) {
+                    boxId = rpcData[0].box_id;
+                }
+            }
+
             await withRetry(3, 'Сохранение', (m) => { msgEl.textContent = m; }, async () => {
                 msgEl.textContent = 'Сохранение...';
                 const { error } = await supabaseClient
@@ -674,6 +698,7 @@
                         shift_date: shift.date,
                         shift_type: shift.type,
                         no_shk_bucket: computeNoShkBucket(),
+                        box_id: boxId,
                     });
                 if (error) throw error;
             });
@@ -682,19 +707,6 @@
             if (state.stickerCode) {
                 showScreen('screenStickerSaved');
             } else {
-                const { error: rpcError } = await supabaseClient.rpc('wms_no_shk_box_log_item', {
-                    p_area: state.area,
-                    p_shift_date: shift.date,
-                    p_shift_type: shift.type,
-                    p_full_name: state.fullName,
-                });
-                if (rpcError) {
-                    // Non-fatal: the submission itself already saved --
-                    // the shift counter is a convenience display, not the
-                    // record of truth. Logged so a broken counter doesn't
-                    // fail silently forever.
-                    console.warn('wms_no_shk_box_log_item failed:', rpcError);
-                }
                 showScreen('screenSuccess');
             }
         } catch (err) {
