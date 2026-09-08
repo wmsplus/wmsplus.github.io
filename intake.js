@@ -431,6 +431,7 @@
             btn.innerHTML = '<span class="category-emoji">' + cat.emoji + '</span><span class="category-label">' + cat.name + '</span>';
             btn.addEventListener('click', () => {
                 state.category = cat.name;
+                state.spillFlag = false;
                 document.getElementById('selectedCategoryLine').innerHTML =
                     '<span class="emoji">' + cat.emoji + '</span><span>' + cat.name + '</span>';
                 if (cat.name === 'Посылка') {
@@ -442,6 +443,7 @@
                     itemNameInput.value = '';
                     itemNameMsg.textContent = '';
                     itemNameMsg.className = 'msg';
+                    document.getElementById('spillBtn').style.display = (cat.name === 'Бытовая химия') ? 'block' : 'none';
                     showScreen('screenItemName');
                 }
             });
@@ -450,16 +452,21 @@
     }
 
     // ---------- Wizard step 2: item name ----------
-    function submitItemName() {
+    function validateItemName() {
         const val = itemNameInput.value.trim();
         if (!val) {
             itemNameMsg.textContent = 'Введите наименование.';
             itemNameMsg.className = 'msg is-error';
-            return;
+            return false;
         }
         state.itemText = val;
         itemNameMsg.textContent = '';
         itemNameMsg.className = 'msg';
+        return true;
+    }
+
+    function submitItemName() {
+        if (!validateItemName()) return;
         photoBackTarget = 'screenItemName';
         clearPhotoMsg();
         showScreen('screenPhoto');
@@ -467,6 +474,18 @@
     document.getElementById('itemNameNextBtn').addEventListener('click', submitItemName);
     itemNameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitItemName(); });
     document.getElementById('backToCategoryBtn').addEventListener('click', () => showScreen('screenCategory'));
+
+    document.getElementById('spillBtn').addEventListener('click', () => {
+        if (!validateItemName()) return;
+        state.spillFlag = true;
+        if (state.area === 'Маркетплейс') {
+            showScreen('screenTakeToHub');
+            return;
+        }
+        photoBackTarget = 'screenItemName';
+        clearPhotoMsg();
+        showScreen('screenPhoto');
+    });
 
     // ---------- Wizard step 3: photo ----------
     const photoInput = document.getElementById('photoInput');
