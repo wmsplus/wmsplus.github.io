@@ -12,6 +12,7 @@
 <meta name="theme-color" content="#623CEA">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <style>
     :root {
         --bg: #DED4FF;
@@ -388,6 +389,29 @@
         <canvas id="qrCanvas" style="display:none;"></canvas>
         <div id="stickerMsg" class="msg"></div>
         <button id="retryQrScanBtn" class="secondary-btn" type="button">Попробовать снова</button>
+    </div>
+</section>
+
+<section id="screenStickerSaved" class="screen">
+    <div id="areaPillStickerSaved" class="area-pill"><span id="areaPillStickerSavedText"></span> ✎</div>
+    <div id="shiftHeaderStickerSaved" class="shift-header"></div>
+    <div class="screen-card" style="text-align:center;">
+        <h1>Стикер сохранён</h1>
+        <p style="margin:0 0 16px;font-size:14px;">Теперь необходимо обработать товар через ТСД.</p>
+        <button id="instrFullBtn" class="primary-btn" type="button">Инструкция</button>
+        <button id="instrSkipBtn" class="secondary-btn" type="button">Пропустить</button>
+    </div>
+</section>
+
+<section id="screenInstrSlide" class="screen">
+    <div id="areaPillInstr" class="area-pill"><span id="areaPillInstrText"></span> ✎</div>
+    <div id="shiftHeaderInstr" class="shift-header"></div>
+    <button id="backToInstrPrevBtn" class="back-btn" type="button">←</button>
+    <div class="screen-card" style="text-align:center;">
+        <div id="instrStepIndicator" style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:8px;"></div>
+        <h1 id="instrStepText"></h1>
+        <div id="instrQrSlot" style="display:flex;justify-content:center;margin:12px 0;"></div>
+        <button id="instrNextBtn" class="primary-btn" type="button">Далее</button>
     </div>
 </section>
 

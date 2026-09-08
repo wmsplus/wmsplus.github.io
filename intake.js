@@ -129,6 +129,7 @@
         [
             'areaPillEntryText', 'areaPillTypeText', 'areaPillCategoryText', 'areaPillNameText',
             'areaPillPhotoText', 'areaPillStickerText', 'areaPill2ShkText', 'areaPillEmptyText',
+            'areaPillStickerSavedText', 'areaPillInstrText',
         ].forEach((id) => {
             document.getElementById(id).textContent = state.area || '';
         });
@@ -165,12 +166,101 @@
         return computeShift().label;
     }
 
+    function renderQrInto(containerId, text) {
+        const el = document.getElementById(containerId);
+        if (!el) return;
+        el.innerHTML = '';
+        if (typeof QRCode === 'undefined') {
+            el.textContent = text;
+            return;
+        }
+        new QRCode(el, { text: text, width: 220, height: 220, correctLevel: QRCode.CorrectLevel.M });
+    }
+
+    const AREA_INSTR_CODES = {
+        'ХАБ': { mx: 'PLCE1034816435', wct: 'WCT1000100010', destination: 'на Идентификацию' },
+        'Упаковка': { mx: 'PLCE1034816436', wct: 'WCT700100010', destination: 'на переупаковку' },
+    };
+    function areaInstrCodes() {
+        return AREA_INSTR_CODES[state.area] || AREA_INSTR_CODES['ХАБ'];
+    }
+
+    const INSTRUCTIONS_FULL = [
+        { text: () => 'Войдите в ТСД под своим бейджиком.' },
+        { text: () => 'Перейдите в модуль «Стол старшего».' },
+        { text: () => 'Перейдите в процесс «Стол старшего».' },
+        { text: () => 'Отсканируйте МХ Стола руководителя.', qr: () => areaInstrCodes().mx },
+        { text: () => 'Отсканируйте тару ПЕРЕУПАКОВКИ, если нужно.', qr: () => areaInstrCodes().wct },
+        { text: () => 'Не сканируйте тару сортировки, нажмите «Пропустить».' },
+        { text: () => 'Далее в интерфейсе нажмите «Нет стикера», затем «Нет баркода», затем «Нет акциза».' },
+        { text: () => 'Далее необходимо отсканировать приклеенный ранее на вещь стикер.' },
+        { text: () => 'Отсканируйте тару ПЕРЕУПАКОВКИ.', qr: () => areaInstrCodes().wct },
+        { text: () => 'Отнесите товар ' + areaInstrCodes().destination + '.' },
+    ];
+
+    const INSTRUCTIONS_SHORT = [
+        { text: () => 'Отсканируйте МХ Стола руководителя.', qr: () => areaInstrCodes().mx },
+        { text: () => 'Отсканируйте тару ПЕРЕУПАКОВКИ, если нужно.', qr: () => areaInstrCodes().wct },
+        { text: () => 'Отсканируйте приклеенный ранее на вещь стикер.' },
+        { text: () => 'Отсканируйте тару ПЕРЕУПАКОВКИ и передайте товар ' + areaInstrCodes().destination + '.', qr: () => areaInstrCodes().wct },
+    ];
+
+    function renderInstrSlide() {
+        const steps = state.instrSequence;
+        const i = state.instrIndex;
+        const step = steps[i];
+        document.getElementById('instrStepIndicator').textContent = 'Шаг ' + (i + 1) + ' из ' + steps.length;
+        document.getElementById('instrStepText').textContent = step.text();
+        const qrSlot = document.getElementById('instrQrSlot');
+        qrSlot.innerHTML = '';
+        if (step.qr) {
+            renderQrInto('instrQrSlot', step.qr());
+        }
+        document.getElementById('instrNextBtn').textContent = (i === steps.length - 1) ? 'Завершить' : 'Далее';
+    }
+
+    function startInstructions(sequence) {
+        state.instrSequence = sequence;
+        state.instrIndex = 0;
+        renderInstrSlide();
+        showScreen('screenInstrSlide');
+    }
+
+    document.getElementById('instrFullBtn').addEventListener('click', () => startInstructions(INSTRUCTIONS_FULL));
+    document.getElementById('instrSkipBtn').addEventListener('click', () => startInstructions(INSTRUCTIONS_SHORT));
+
+    document.getElementById('instrNextBtn').addEventListener('click', () => {
+        const steps = state.instrSequence;
+        if (state.instrIndex === steps.length - 1) {
+            state.itemType = null;
+            state.category = null;
+            state.itemText = null;
+            state.photoPath = null;
+            state.stickerCode = null;
+            state.spillFlag = false;
+            showScreen('screenEntryType');
+            return;
+        }
+        state.instrIndex += 1;
+        renderInstrSlide();
+    });
+
+    document.getElementById('backToInstrPrevBtn').addEventListener('click', () => {
+        if (state.instrIndex === 0) {
+            showScreen('screenStickerSaved');
+        } else {
+            state.instrIndex -= 1;
+            renderInstrSlide();
+        }
+    });
+
     function updateShiftHeaders() {
         const label = shiftLabel();
         [
             'shiftHeaderEntry', 'shiftHeaderType', 'shiftHeaderCategory',
             'shiftHeaderName', 'shiftHeaderPhoto', 'shiftHeaderSticker',
             'shiftHeader2Shk', 'shiftHeaderEmpty',
+            'shiftHeaderStickerSaved', 'shiftHeaderInstr',
         ].forEach((id) => {
             const el = document.getElementById(id);
             if (el) el.textContent = label;
@@ -263,6 +353,7 @@
     [
         'areaPillEntry', 'areaPillType', 'areaPillCategory', 'areaPillName',
         'areaPillPhoto', 'areaPillSticker', 'areaPill2Shk', 'areaPillEmpty',
+        'areaPillStickerSaved', 'areaPillInstr',
     ].forEach((id) => {
         document.getElementById(id).addEventListener('click', () => {
             stopQrScan();
@@ -529,7 +620,11 @@
             });
             const scanBackBtn = document.getElementById('backToPhotoFromScanBtn');
             if (scanBackBtn) scanBackBtn.disabled = false;
-            showScreen('screenSuccess');
+            if (state.stickerCode) {
+                showScreen('screenStickerSaved');
+            } else {
+                showScreen('screenSuccess');
+            }
         } catch (err) {
             msgEl.textContent = 'Не получилось отправить (проверьте связь и попробуйте ещё раз): ' + (err.message || 'ошибка сети');
             msgEl.className = 'msg is-error';
