@@ -407,6 +407,7 @@
                 shkWrongInput.value = '';
                 shk2Msg.textContent = '';
                 shk2Msg.className = 'msg';
+                resetShk2Photos();
                 showScreen('screen2Shk');
             } else if (entry === 'empty-package') {
                 shkEmptyInput.value = '';
@@ -769,7 +770,18 @@
     const shkWrongInput = document.getElementById('shkWrongInput');
     const photo2ShkInput = document.getElementById('photo2ShkInput');
     const photo2ShkPickBtn = document.getElementById('photo2ShkPickBtn');
+    const photo2ShkInput2 = document.getElementById('photo2ShkInput2');
+    const photo2ShkPickBtn2 = document.getElementById('photo2ShkPickBtn2');
     const shk2Msg = document.getElementById('shk2Msg');
+    let shk2FirstPhotoPath = null;
+
+    function resetShk2Photos() {
+        shk2FirstPhotoPath = null;
+        photo2ShkPickBtn.disabled = false;
+        photo2ShkPickBtn.textContent = '📷 Добавьте фото 1';
+        photo2ShkPickBtn2.style.display = 'none';
+        photo2ShkPickBtn2.disabled = false;
+    }
 
     photo2ShkPickBtn.addEventListener('click', () => {
         const correct = shkCorrectInput.value.trim();
@@ -786,6 +798,32 @@
 
     photo2ShkInput.addEventListener('change', () => {
         const file = photo2ShkInput.files[0];
+        if (file) void handleFirstPhoto2Shk(file);
+    });
+
+    async function handleFirstPhoto2Shk(rawFile) {
+        if (document.getElementById('c_addr_2').value) return;
+        photo2ShkPickBtn.disabled = true;
+        shk2Msg.className = 'msg';
+        try {
+            shk2FirstPhotoPath = await uploadCompressedPhoto(rawFile, (m) => { shk2Msg.textContent = m; });
+            photo2ShkPickBtn.textContent = '✓ Фото 1 добавлено';
+            shk2Msg.textContent = 'Теперь добавьте второе фото.';
+            shk2Msg.className = 'msg';
+            photo2ShkPickBtn2.style.display = '';
+        } catch (err) {
+            shk2Msg.textContent = 'Не получилось отправить (проверьте связь и попробуйте ещё раз): ' + (err.message || 'ошибка сети');
+            shk2Msg.className = 'msg is-error';
+            photo2ShkPickBtn.disabled = false;
+        } finally {
+            photo2ShkInput.value = '';
+        }
+    }
+
+    photo2ShkPickBtn2.addEventListener('click', () => photo2ShkInput2.click());
+
+    photo2ShkInput2.addEventListener('change', () => {
+        const file = photo2ShkInput2.files[0];
         if (file) submit2Shk(file);
     });
 
@@ -793,17 +831,18 @@
         if (document.getElementById('c_addr_2').value) return;
         const correct = shkCorrectInput.value.trim();
         const wrong = shkWrongInput.value.trim();
-        photo2ShkPickBtn.disabled = true;
+        photo2ShkPickBtn2.disabled = true;
         shk2Msg.className = 'msg';
         try {
-            const path = await uploadCompressedPhoto(rawFile, (m) => { shk2Msg.textContent = m; });
+            const path2 = await uploadCompressedPhoto(rawFile, (m) => { shk2Msg.textContent = m; });
             await withRetry(3, 'Сохранение', (m) => { shk2Msg.textContent = m; }, async () => {
                 shk2Msg.textContent = 'Сохранение...';
                 const { error } = await supabaseClient.from('2shk_rep').insert({
                     shk1: correct,
                     shk2: wrong,
                     eventtype: 'Два ШК',
-                    media: buildPublicPhotoUrl(path),
+                    media: buildPublicPhotoUrl(shk2FirstPhotoPath),
+                    media2: buildPublicPhotoUrl(path2),
                     wh_id: '50144199',
                 });
                 if (error) throw error;
@@ -813,8 +852,8 @@
             shk2Msg.textContent = 'Не получилось отправить (проверьте связь и попробуйте ещё раз): ' + (err.message || 'ошибка сети');
             shk2Msg.className = 'msg is-error';
         } finally {
-            photo2ShkPickBtn.disabled = false;
-            photo2ShkInput.value = '';
+            photo2ShkPickBtn2.disabled = false;
+            photo2ShkInput2.value = '';
         }
     }
 
