@@ -492,6 +492,7 @@
 
     function submitItemName() {
         if (!validateItemName()) return;
+        state.spillFlag = false;
         photoBackTarget = 'screenItemName';
         clearPhotoMsg();
         showScreen('screenPhoto');
@@ -681,17 +682,18 @@
             if (state.stickerCode) {
                 showScreen('screenStickerSaved');
             } else {
-                try {
-                    await supabaseClient.rpc('wms_no_shk_box_log_item', {
-                        p_area: state.area,
-                        p_shift_date: shift.date,
-                        p_shift_type: shift.type,
-                        p_full_name: state.fullName,
-                    });
-                } catch (rpcErr) {
+                const { error: rpcError } = await supabaseClient.rpc('wms_no_shk_box_log_item', {
+                    p_area: state.area,
+                    p_shift_date: shift.date,
+                    p_shift_type: shift.type,
+                    p_full_name: state.fullName,
+                });
+                if (rpcError) {
                     // Non-fatal: the submission itself already saved --
                     // the shift counter is a convenience display, not the
-                    // record of truth.
+                    // record of truth. Logged so a broken counter doesn't
+                    // fail silently forever.
+                    console.warn('wms_no_shk_box_log_item failed:', rpcError);
                 }
                 showScreen('screenSuccess');
             }
