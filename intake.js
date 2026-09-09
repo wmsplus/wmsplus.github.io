@@ -22,6 +22,7 @@
         { name: 'Посуда', emoji: '🍽️' },
         { name: 'Еда', emoji: '🍎' },
         { name: 'Посылка', emoji: '📦' },
+        { name: 'Другое', emoji: '🧩' },
     ];
     const CATEGORIES_KGT = [
         { name: 'Обувь', emoji: '👟' },
@@ -33,6 +34,7 @@
         { name: 'Посуда', emoji: '🍽️' },
         { name: 'Еда', emoji: '🍎' },
         { name: 'Посылка', emoji: '📦' },
+        { name: 'Другое', emoji: '🧩' },
     ];
 
     const LS_EMPLOYEE_ID = 'wmsplus_intake_employee_id';
