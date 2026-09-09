@@ -696,11 +696,20 @@
                 }
             }
 
+            // intake_submissions is insert-only for anon (no SELECT grant --
+            // see this repo's access-model notes), and Postgres' INSERT ...
+            // RETURNING needs SELECT privilege even via PostgREST's
+            // .select() chaining, so the id can't be read back after
+            // inserting. Generate it client-side instead, overriding the
+            // column's own gen_random_uuid() default, so it's known
+            // up-front for the sticker-history write below.
+            const submissionId = crypto.randomUUID();
             await withRetry(3, 'Сохранение', (m) => { msgEl.textContent = m; }, async () => {
                 msgEl.textContent = 'Сохранение...';
                 const { error } = await supabaseClient
                     .from('intake_submissions')
                     .insert({
+                        id: submissionId,
                         item_text: state.itemText,
                         employee_id: Number(state.employeeId),
                         full_name: state.fullName,
@@ -715,6 +724,22 @@
                         box_id: boxId,
                     });
                 if (error) throw error;
+                // Non-fatal: the sticker itself is already saved on the
+                // row above either way, this just feeds the assignment
+                // history (see wms_no_shk_sticker_events).
+                if (state.stickerCode) {
+                    const { error: historyError } = await supabaseClient
+                        .from('wms_no_shk_sticker_events')
+                        .insert({
+                            intake_submission_id: submissionId,
+                            sticker_code: state.stickerCode,
+                            source: 'form',
+                            actor_employee_id: state.employeeId != null ? String(state.employeeId) : null,
+                            actor_name: state.fullName,
+                            payload: { note: 'Присвоен стикер к товару «Без ШК»' },
+                        });
+                    if (historyError) console.warn('sticker history insert failed:', historyError);
+                }
             });
             const scanBackBtn = document.getElementById('backToPhotoFromScanBtn');
             if (scanBackBtn) scanBackBtn.disabled = false;
