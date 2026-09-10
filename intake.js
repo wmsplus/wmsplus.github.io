@@ -828,10 +828,169 @@
     });
 
     // ---------- QR scan for revision-office location check (shift-box closing) ----------
-    async function runShiftClosePrint() {
-        showScreen('screenShiftClose');
-        document.getElementById('shiftCloseMsg').textContent = '(печать ещё не реализована — Task 6)';
+    function formatDateShortClose(isoDate) {
+        const parts = String(isoDate).split('-');
+        if (parts.length !== 3) return String(isoDate);
+        return parts[2] + '.' + parts[1] + '.' + parts[0].slice(2);
     }
+
+    function addDaysClose(isoDate, days) {
+        const d = new Date(isoDate + 'T00:00:00Z');
+        d.setUTCDate(d.getUTCDate() + days);
+        return d.toISOString().slice(0, 10);
+    }
+
+    let boxLabelTemplateForClose = null;
+    let kgtLabelTemplate = null;
+
+    async function loadCloseTemplates() {
+        if (!boxLabelTemplateForClose) {
+            const { data } = await supabaseClient.from('print_label_templates').select('id,width_mm,height_mm,elements').eq('name', 'Короб «Без ШК»').maybeSingle();
+            boxLabelTemplateForClose = data || null;
+        }
+        if (!kgtLabelTemplate) {
+            const { data } = await supabaseClient.from('print_label_templates').select('id,width_mm,height_mm,elements').eq('name', 'КГТ «Без ШК»').maybeSingle();
+            kgtLabelTemplate = data || null;
+        }
+    }
+
+    async function finishShiftClosePrint(anyFailed, msg, retryBtn) {
+        if (anyFailed) {
+            msg.textContent = 'Не всё напечаталось. Проверьте принтер и попробуйте ещё раз.';
+            msg.className = 'msg is-error';
+            retryBtn.style.display = '';
+            return;
+        }
+        const { error } = await supabaseClient.from('wms_no_shk_boxes').update({ outside_opp: false }).eq('id', shiftCloseBoxId);
+        if (error) {
+            msg.textContent = 'Стикеры напечатаны, но не удалось закрыть короб: ' + error.message;
+            msg.className = 'msg is-error';
+            retryBtn.style.display = '';
+            return;
+        }
+        msg.textContent = 'Готово! Короб закрыт.';
+        msg.className = 'msg';
+        setTimeout(() => { showScreen('screenEntryType'); }, 1500);
+    }
+
+    async function runShiftClosePrint() {
+        showScreen('screenShiftClosePrint');
+        const list = document.getElementById('shiftClosePrintList');
+        const msg = document.getElementById('shiftClosePrintMsg');
+        const retryBtn = document.getElementById('shiftClosePrintRetryBtn');
+        retryBtn.style.display = 'none';
+        msg.textContent = '';
+        msg.className = 'msg';
+        list.textContent = 'Готовлю печать...';
+
+        await loadCloseTemplates();
+        if (!boxLabelTemplateForClose) {
+            list.textContent = '';
+            msg.textContent = 'Шаблон этикетки «Короб «Без ШК»» не найден.';
+            msg.className = 'msg is-error';
+            retryBtn.style.display = '';
+            return;
+        }
+
+        const { data: contentRows, error: contentsError } = await supabaseClient.rpc('wms_no_shk_box_contents', { p_box_id: shiftCloseBoxId });
+        if (contentsError) {
+            list.textContent = '';
+            msg.textContent = 'Не удалось прочитать содержимое короба: ' + contentsError.message;
+            msg.className = 'msg is-error';
+            retryBtn.style.display = '';
+            return;
+        }
+        const { kgtItems } = partitionBoxContents(contentRows || []);
+        if (kgtItems.length && !kgtLabelTemplate) {
+            list.textContent = '';
+            msg.textContent = 'Шаблон этикетки «КГТ «Без ШК»» не найден.';
+            msg.className = 'msg is-error';
+            retryBtn.style.display = '';
+            return;
+        }
+
+        const dateLine1 = formatDateShortClose(shiftCloseShift.date);
+        const dateLine2 = shiftCloseShift.type === 'Ночная' ? formatDateShortClose(addDaysClose(shiftCloseShift.date, 1)) : '';
+
+        const jobsToCreate = [{
+            label: 'Короб',
+            template: boxLabelTemplateForClose,
+            data: {
+                box_code: 'WMSP.BOX.' + String(shiftCloseBoxNumber).padStart(5, '0'),
+                box_number: String(shiftCloseBoxNumber),
+                box_type: 'Короб',
+                area: state.area,
+                date_line1: dateLine1,
+                date_line2: dateLine2,
+                shift: shiftCloseShift.type === 'Ночная' ? 'Ночь' : 'День',
+            },
+        }];
+        kgtItems.forEach((item, i) => {
+            jobsToCreate.push({
+                label: 'КГТ ' + (i + 1) + ' из ' + kgtItems.length,
+                template: kgtLabelTemplate,
+                data: { name: item.item_text, area: state.area, date_line1: dateLine1, date_line2: dateLine2 },
+            });
+        });
+
+        list.innerHTML = '';
+        const jobRows = jobsToCreate.map((j) => {
+            const row = document.createElement('div');
+            row.textContent = j.label + ': в очереди...';
+            list.appendChild(row);
+            return { ...j, rowEl: row, jobId: null };
+        });
+
+        let insertError = null;
+        for (const job of jobRows) {
+            const tspl = buildTsplPayloadBase64(job.template, job.data);
+            const { data: inserted, error } = await supabaseClient
+                .from('print_jobs')
+                .insert({ template_id: job.template.id, data: job.data, tspl, created_by: state.employeeId != null ? String(state.employeeId) : null })
+                .select('id,status')
+                .single();
+            if (error) {
+                insertError = error;
+                job.rowEl.textContent = job.label + ': ошибка постановки в очередь (' + error.message + ')';
+                continue;
+            }
+            job.jobId = inserted.id;
+            job.rowEl.textContent = job.label + ': печатаю...';
+        }
+        if (insertError) {
+            msg.textContent = 'Не удалось поставить все стикеры в очередь.';
+            msg.className = 'msg is-error';
+            retryBtn.style.display = '';
+            return;
+        }
+
+        msg.textContent = 'Печатаю...';
+        let remaining = jobRows.length;
+        let anyFailed = false;
+        jobRows.forEach((job) => {
+            const channel = supabaseClient
+                .channel('shift_close_print_job_' + job.jobId)
+                .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'print_jobs', filter: 'id=eq.' + job.jobId }, (payload) => {
+                    const row = payload.new;
+                    if (row.status === 'printed') {
+                        job.rowEl.textContent = job.label + ': напечатано ✓';
+                    } else if (row.status === 'failed') {
+                        job.rowEl.textContent = job.label + ': ошибка (' + (row.error_message || 'неизвестная ошибка') + ')';
+                        anyFailed = true;
+                    } else {
+                        return;
+                    }
+                    remaining -= 1;
+                    supabaseClient.removeChannel(channel);
+                    if (remaining === 0) void finishShiftClosePrint(anyFailed, msg, retryBtn);
+                })
+                .subscribe();
+        });
+    }
+
+    document.getElementById('shiftClosePrintRetryBtn').addEventListener('click', () => {
+        void runShiftClosePrint();
+    });
 
     const closeQrMsg = document.getElementById('closeQrMsg');
     let closeQrStream = null;
