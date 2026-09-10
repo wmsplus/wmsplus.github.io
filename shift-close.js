@@ -7,11 +7,14 @@
 const SHIFT_CLOSE_QR_VALUE = "WMSP.PLCE.WSHK.FLR";
 
 // Hard gate: the shift counter only becomes tappable from 19:30 local
-// time onward (day-shift closing window), no upper bound -- it stays
-// tappable through the rest of the day and night until used.
+// time onward, no upper bound within that window -- it stays tappable
+// through the rest of the day and night until used. The early-morning
+// side of that window mirrors intake.js's own computeShift() day/night
+// boundary (day shift starts at 8:00), so this stays unlocked for the
+// entire night shift rather than an arbitrary cutoff.
 function isShiftCloseUnlocked(date) {
     const totalMinutes = date.getHours() * 60 + date.getMinutes();
-    return totalMinutes >= (19 * 60 + 30) || date.getHours() < 4;
+    return totalMinutes >= (19 * 60 + 30) || date.getHours() < 8;
 }
 
 // Splits wms_no_shk_box_contents() rows into the ones that need their own

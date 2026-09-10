@@ -20,12 +20,14 @@ test("SHIFT_CLOSE_QR_VALUE matches the physical QR placed in the revision office
 test("isShiftCloseUnlocked is false before 19:30", () => {
     assert.strictEqual(isShiftCloseUnlocked(new Date(2026, 0, 1, 10, 0)), false);
     assert.strictEqual(isShiftCloseUnlocked(new Date(2026, 0, 1, 19, 29)), false);
+    assert.strictEqual(isShiftCloseUnlocked(new Date(2026, 0, 1, 8, 0)), false);
 });
 
 test("isShiftCloseUnlocked is true from 19:30 onward, no upper bound", () => {
     assert.strictEqual(isShiftCloseUnlocked(new Date(2026, 0, 1, 19, 30)), true);
     assert.strictEqual(isShiftCloseUnlocked(new Date(2026, 0, 1, 23, 59)), true);
     assert.strictEqual(isShiftCloseUnlocked(new Date(2026, 0, 1, 3, 0)), true);
+    assert.strictEqual(isShiftCloseUnlocked(new Date(2026, 0, 1, 7, 59)), true);
 });
 
 test("partitionBoxContents pulls out only КГТ rows, preserving order", () => {
