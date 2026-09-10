@@ -300,7 +300,7 @@
             'shiftHeaderEntry', 'shiftHeaderType', 'shiftHeaderCategory',
             'shiftHeaderName', 'shiftHeaderPhoto', 'shiftHeaderSticker',
             'shiftHeader2Shk', 'shiftHeaderEmpty',
-            'shiftHeaderStickerSaved', 'shiftHeaderInstr', 'shiftHeaderHub',
+            'shiftHeaderStickerSaved', 'shiftHeaderInstr', 'shiftHeaderHub', 'shiftHeaderClose',
         ].forEach((id) => {
             const el = document.getElementById(id);
             if (el) el.textContent = label;
