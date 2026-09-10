@@ -160,6 +160,7 @@
             'areaPillEntryText', 'areaPillTypeText', 'areaPillCategoryText', 'areaPillNameText',
             'areaPillPhotoText', 'areaPillStickerText', 'areaPill2ShkText', 'areaPillEmptyText',
             'areaPillStickerSavedText', 'areaPillInstrText', 'areaPillHubText', 'areaPillCloseText',
+            'areaPillCloseQrText',
         ].forEach((id) => {
             document.getElementById(id).textContent = state.area || '';
         });
@@ -301,6 +302,7 @@
             'shiftHeaderName', 'shiftHeaderPhoto', 'shiftHeaderSticker',
             'shiftHeader2Shk', 'shiftHeaderEmpty',
             'shiftHeaderStickerSaved', 'shiftHeaderInstr', 'shiftHeaderHub', 'shiftHeaderClose',
+            'shiftHeaderCloseQr',
         ].forEach((id) => {
             const el = document.getElementById(id);
             if (el) el.textContent = label;
@@ -394,6 +396,7 @@
         'areaPillEntry', 'areaPillType', 'areaPillCategory', 'areaPillName',
         'areaPillPhoto', 'areaPillSticker', 'areaPill2Shk', 'areaPillEmpty',
         'areaPillStickerSaved', 'areaPillInstr', 'areaPillHub', 'areaPillClose',
+        'areaPillCloseQr',
     ].forEach((id) => {
         document.getElementById(id).addEventListener('click', () => {
             stopQrScan();
@@ -817,6 +820,94 @@
     document.getElementById('backToPhotoFromCloseBtn').addEventListener('click', () => {
         showScreen(shiftCloseReturnTo);
     });
+
+    document.getElementById('shiftCloseStartBtn').addEventListener('click', () => {
+        showScreen('screenShiftCloseQr');
+        startCloseQrScan();
+    });
+
+    // ---------- QR scan for revision-office location check (shift-box closing) ----------
+    async function runShiftClosePrint() {
+        showScreen('screenShiftClose');
+        document.getElementById('shiftCloseMsg').textContent = '(печать ещё не реализована — Task 6)';
+    }
+
+    const closeQrMsg = document.getElementById('closeQrMsg');
+    let closeQrStream = null;
+    let closeQrAnimFrame = null;
+    let closeQrScanCancelled = false;
+
+    function stopCloseQrScan() {
+        closeQrScanCancelled = true;
+        if (closeQrAnimFrame) {
+            cancelAnimationFrame(closeQrAnimFrame);
+            closeQrAnimFrame = null;
+        }
+        if (closeQrStream) {
+            closeQrStream.getTracks().forEach((t) => t.stop());
+            closeQrStream = null;
+        }
+    }
+
+    async function startCloseQrScan() {
+        closeQrScanCancelled = false;
+        closeQrMsg.textContent = '';
+        closeQrMsg.className = 'msg';
+        if (typeof jsQR === 'undefined') {
+            closeQrMsg.textContent = 'Не удалось загрузить сканер QR. Проверьте подключение к интернету и обновите страницу.';
+            closeQrMsg.className = 'msg is-error';
+            return;
+        }
+        const video = document.getElementById('closeQrVideo');
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+            if (closeQrScanCancelled) {
+                stream.getTracks().forEach((t) => t.stop());
+                return;
+            }
+            closeQrStream = stream;
+            video.srcObject = closeQrStream;
+            await video.play();
+            if (closeQrScanCancelled) return;
+            closeQrAnimFrame = requestAnimationFrame(scanCloseQrFrame);
+        } catch (err) {
+            if (closeQrScanCancelled) return;
+            closeQrMsg.textContent = 'Не удалось открыть камеру: ' + (err.message || 'нет доступа');
+            closeQrMsg.className = 'msg is-error';
+        }
+    }
+
+    function scanCloseQrFrame() {
+        const video = document.getElementById('closeQrVideo');
+        const canvas = document.getElementById('closeQrCanvas');
+        if (video.readyState === video.HAVE_ENOUGH_DATA) {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const code = jsQR(imageData.data, imageData.width, imageData.height);
+            if (code && code.data) {
+                if (code.data !== SHIFT_CLOSE_QR_VALUE) {
+                    closeQrMsg.textContent = 'Это не тот QR-код. Отсканируйте QR в кабинете ревизии.';
+                    closeQrMsg.className = 'msg is-error';
+                    closeQrAnimFrame = requestAnimationFrame(scanCloseQrFrame);
+                    return;
+                }
+                stopCloseQrScan();
+                void runShiftClosePrint();
+                return;
+            }
+        }
+        closeQrAnimFrame = requestAnimationFrame(scanCloseQrFrame);
+    }
+
+    document.getElementById('backToCloseFromQrBtn').addEventListener('click', () => {
+        stopCloseQrScan();
+        showScreen('screenShiftClose');
+    });
+
+    document.getElementById('retryCloseQrScanBtn').addEventListener('click', () => startCloseQrScan());
 
     // ---------- Entry-type sub-flows: 2 ШК / Пустая упаковка (write to 2shk_rep) ----------
     function isDigitsOnly(v) {

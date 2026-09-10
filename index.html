@@ -466,6 +466,19 @@
     </div>
 </section>
 
+<section id="screenShiftCloseQr" class="screen">
+    <div id="areaPillCloseQr" class="area-pill"><span id="areaPillCloseQrText"></span> ✎</div>
+    <div id="shiftHeaderCloseQr" class="shift-header"></div>
+    <button id="backToCloseFromQrBtn" class="back-btn" type="button">←</button>
+    <div class="screen-card" style="text-align:center;">
+        <h1>Отсканируйте QR-код в кабинете ревизии</h1>
+        <video id="closeQrVideo" playsinline muted style="width:100%;max-width:320px;border-radius:var(--radius-md);background:#000;"></video>
+        <canvas id="closeQrCanvas" style="display:none;"></canvas>
+        <div id="closeQrMsg" class="msg"></div>
+        <button id="retryCloseQrScanBtn" class="secondary-btn" type="button">Попробовать снова</button>
+    </div>
+</section>
+
 <section id="screenSuccess" class="screen success">
     <div class="screen-card" style="text-align:center;">
         <h1>Заявка отправлена</h1>
