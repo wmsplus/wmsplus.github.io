@@ -203,6 +203,12 @@
         z-index: 9;
     }
 
+    .shift-counter.is-tappable {
+        cursor: pointer;
+        color: var(--accent);
+        border-color: var(--accent);
+    }
+
     .category-grid {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
@@ -445,6 +451,18 @@
     <div class="screen-card" style="text-align:center;">
         <h1>Отнесите товар на ХАБ</h1>
         <button id="hubBackBtn" class="primary-btn" type="button">В меню</button>
+    </div>
+</section>
+
+<section id="screenShiftClose" class="screen">
+    <div id="areaPillClose" class="area-pill"><span id="areaPillCloseText"></span> ✎</div>
+    <div id="shiftHeaderClose" class="shift-header"></div>
+    <button id="backToPhotoFromCloseBtn" class="back-btn" type="button">←</button>
+    <div class="screen-card" style="text-align:center;">
+        <h1>Закрыть коробку</h1>
+        <p id="shiftCloseCount" style="margin:0 0 16px;font-size:14px;"></p>
+        <button id="shiftCloseStartBtn" class="primary-btn" type="button" style="display:none;">Закрыть коробку</button>
+        <div id="shiftCloseMsg" class="msg"></div>
     </div>
 </section>
 

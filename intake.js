@@ -65,9 +65,12 @@
             .eq('shift_type', shift.type)
             .eq('outside_opp', true)
             .maybeSingle();
+        const count = error || !data ? 0 : data.total_items;
+        const unlocked = isShiftCloseUnlocked(new Date());
         els.forEach((el) => {
             el.style.display = '';
-            el.textContent = 'За смену зафиксировано: ' + (error || !data ? 0 : data.total_items);
+            el.textContent = 'За смену зафиксировано: ' + count;
+            el.classList.toggle('is-tappable', unlocked);
         });
     }
 
@@ -156,7 +159,7 @@
         [
             'areaPillEntryText', 'areaPillTypeText', 'areaPillCategoryText', 'areaPillNameText',
             'areaPillPhotoText', 'areaPillStickerText', 'areaPill2ShkText', 'areaPillEmptyText',
-            'areaPillStickerSavedText', 'areaPillInstrText', 'areaPillHubText',
+            'areaPillStickerSavedText', 'areaPillInstrText', 'areaPillHubText', 'areaPillCloseText',
         ].forEach((id) => {
             document.getElementById(id).textContent = state.area || '';
         });
@@ -390,7 +393,7 @@
     [
         'areaPillEntry', 'areaPillType', 'areaPillCategory', 'areaPillName',
         'areaPillPhoto', 'areaPillSticker', 'areaPill2Shk', 'areaPillEmpty',
-        'areaPillStickerSaved', 'areaPillInstr', 'areaPillHub',
+        'areaPillStickerSaved', 'areaPillInstr', 'areaPillHub', 'areaPillClose',
     ].forEach((id) => {
         document.getElementById(id).addEventListener('click', () => {
             stopQrScan();
@@ -765,6 +768,54 @@
         state.stickerCode = null;
         state.spillFlag = false;
         showScreen('screenEntryType');
+    });
+
+    // ---------- Shift-box closing (end-of-shift, 19:30+) ----------
+    let shiftCloseReturnTo = 'screenItemType';
+    let shiftCloseBoxId = null;
+    let shiftCloseBoxNumber = null;
+    let shiftCloseShift = null;
+
+    document.querySelectorAll('[data-shift-counter]').forEach((el) => {
+        el.addEventListener('click', () => {
+            if (!el.classList.contains('is-tappable')) return;
+            const active = screens.find((s) => s.classList.contains('is-active'));
+            if (active) shiftCloseReturnTo = active.id;
+            void openShiftClose();
+        });
+    });
+
+    async function openShiftClose() {
+        showScreen('screenShiftClose');
+        const countLine = document.getElementById('shiftCloseCount');
+        const startBtn = document.getElementById('shiftCloseStartBtn');
+        const msg = document.getElementById('shiftCloseMsg');
+        msg.textContent = '';
+        msg.className = 'msg';
+        startBtn.style.display = 'none';
+        countLine.textContent = 'Проверяю...';
+        const shift = computeShift();
+        const { data, error } = await supabaseClient
+            .from('wms_no_shk_boxes')
+            .select('id,total_items,box_number')
+            .eq('area', state.area)
+            .eq('shift_date', shift.date)
+            .eq('shift_type', shift.type)
+            .eq('outside_opp', true)
+            .maybeSingle();
+        if (error || !data || !data.total_items) {
+            countLine.textContent = 'Нечего закрывать.';
+            return;
+        }
+        shiftCloseBoxId = data.id;
+        shiftCloseBoxNumber = data.box_number;
+        shiftCloseShift = shift;
+        countLine.textContent = 'За смену зафиксировано: ' + data.total_items;
+        startBtn.style.display = '';
+    }
+
+    document.getElementById('backToPhotoFromCloseBtn').addEventListener('click', () => {
+        showScreen(shiftCloseReturnTo);
     });
 
     // ---------- Entry-type sub-flows: 2 ШК / Пустая упаковка (write to 2shk_rep) ----------
