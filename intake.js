@@ -415,6 +415,7 @@
                 shkEmptyInput.value = '';
                 emptyMsg.textContent = '';
                 emptyMsg.className = 'msg';
+                resetEmptyPhotos();
                 showScreen('screenEmptyPackage');
             }
         });
@@ -887,7 +888,18 @@
     const shkEmptyInput = document.getElementById('shkEmptyInput');
     const photoEmptyInput = document.getElementById('photoEmptyInput');
     const photoEmptyPickBtn = document.getElementById('photoEmptyPickBtn');
+    const photoEmptyInput2 = document.getElementById('photoEmptyInput2');
+    const photoEmptyPickBtn2 = document.getElementById('photoEmptyPickBtn2');
     const emptyMsg = document.getElementById('emptyMsg');
+    let emptyFirstPhotoPath = null;
+
+    function resetEmptyPhotos() {
+        emptyFirstPhotoPath = null;
+        photoEmptyPickBtn.disabled = false;
+        photoEmptyPickBtn.textContent = '📷 Добавьте фото 1';
+        photoEmptyPickBtn2.style.display = 'none';
+        photoEmptyPickBtn2.disabled = false;
+    }
 
     photoEmptyPickBtn.addEventListener('click', () => {
         const shk = shkEmptyInput.value.trim();
@@ -903,23 +915,50 @@
 
     photoEmptyInput.addEventListener('change', () => {
         const file = photoEmptyInput.files[0];
+        if (file) void handleFirstPhotoEmpty(file);
+    });
+
+    async function handleFirstPhotoEmpty(rawFile) {
+        if (document.getElementById('c_addr_2').value) return;
+        photoEmptyPickBtn.disabled = true;
+        emptyMsg.className = 'msg';
+        try {
+            emptyFirstPhotoPath = await uploadCompressedPhoto(rawFile, (m) => { emptyMsg.textContent = m; });
+            photoEmptyPickBtn.textContent = '✓ Фото 1 добавлено';
+            emptyMsg.textContent = 'Теперь добавьте второе фото.';
+            emptyMsg.className = 'msg';
+            photoEmptyPickBtn2.style.display = '';
+        } catch (err) {
+            emptyMsg.textContent = 'Не получилось отправить (проверьте связь и попробуйте ещё раз): ' + (err.message || 'ошибка сети');
+            emptyMsg.className = 'msg is-error';
+            photoEmptyPickBtn.disabled = false;
+        } finally {
+            photoEmptyInput.value = '';
+        }
+    }
+
+    photoEmptyPickBtn2.addEventListener('click', () => photoEmptyInput2.click());
+
+    photoEmptyInput2.addEventListener('change', () => {
+        const file = photoEmptyInput2.files[0];
         if (file) submitEmptyPackage(file);
     });
 
     async function submitEmptyPackage(rawFile) {
         if (document.getElementById('c_addr_2').value) return;
         const shk = shkEmptyInput.value.trim();
-        photoEmptyPickBtn.disabled = true;
+        photoEmptyPickBtn2.disabled = true;
         emptyMsg.className = 'msg';
         try {
-            const path = await uploadCompressedPhoto(rawFile, (m) => { emptyMsg.textContent = m; });
+            const path2 = await uploadCompressedPhoto(rawFile, (m) => { emptyMsg.textContent = m; });
             await withRetry(3, 'Сохранение', (m) => { emptyMsg.textContent = m; }, async () => {
                 emptyMsg.textContent = 'Сохранение...';
                 const { error } = await supabaseClient.from('2shk_rep').insert({
                     shk1: shk,
                     shk2: ' ',
                     eventtype: 'Пустая упаковка',
-                    media: buildPublicPhotoUrl(path),
+                    media: buildPublicPhotoUrl(emptyFirstPhotoPath),
+                    media2: buildPublicPhotoUrl(path2),
                     wh_id: '50144199',
                 });
                 if (error) throw error;
@@ -929,8 +968,8 @@
             emptyMsg.textContent = 'Не получилось отправить (проверьте связь и попробуйте ещё раз): ' + (err.message || 'ошибка сети');
             emptyMsg.className = 'msg is-error';
         } finally {
-            photoEmptyPickBtn.disabled = false;
-            photoEmptyInput.value = '';
+            photoEmptyPickBtn2.disabled = false;
+            photoEmptyInput2.value = '';
         }
     }
 
