@@ -400,6 +400,7 @@
     ].forEach((id) => {
         document.getElementById(id).addEventListener('click', () => {
             stopQrScan();
+            stopCloseQrScan();
             showScreen('screenArea');
         });
     });
