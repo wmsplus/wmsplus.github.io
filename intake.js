@@ -56,14 +56,17 @@
             els.forEach((el) => { el.style.display = 'none'; });
             return;
         }
-        const shift = computeShift();
+        // Deliberately NOT filtered by a freshly computed shift_date/shift_type
+        // (computeShift() flips at 20:00) -- see openShiftClose() below for why.
+        // area + outside_opp alone is what actually determines "the box to close".
         const { data, error } = await supabaseClient
             .from('wms_no_shk_boxes')
             .select('total_items')
             .eq('area', state.area)
-            .eq('shift_date', shift.date)
-            .eq('shift_type', shift.type)
             .eq('outside_opp', true)
+            .order('shift_date', { ascending: true })
+            .order('created_at', { ascending: true })
+            .limit(1)
             .maybeSingle();
         const count = error || !data ? 0 : data.total_items;
         const unlocked = isShiftCloseUnlocked(new Date());
@@ -798,14 +801,23 @@
         msg.className = 'msg';
         startBtn.style.display = 'none';
         countLine.textContent = 'Проверяю...';
-        const shift = computeShift();
+        // Same query shape as refreshShiftCounter(): area + outside_opp only,
+        // oldest first -- NOT a freshly computed shift_date/shift_type (that
+        // flips at 20:00, right in the middle of a realistic close-flow
+        // duration, which would make the query miss the day box entirely).
+        // Ordering oldest-first handles the edge case where a day box was
+        // left open past 20:00 while a new night box has already started
+        // forming for the same area: this deterministically picks the older
+        // (day) box first; running the close flow again afterward would then
+        // find the newer (night) one.
         const { data, error } = await supabaseClient
             .from('wms_no_shk_boxes')
-            .select('id,total_items,box_number')
+            .select('id,total_items,box_number,shift_date,shift_type')
             .eq('area', state.area)
-            .eq('shift_date', shift.date)
-            .eq('shift_type', shift.type)
             .eq('outside_opp', true)
+            .order('shift_date', { ascending: true })
+            .order('created_at', { ascending: true })
+            .limit(1)
             .maybeSingle();
         if (error || !data || !data.total_items) {
             countLine.textContent = 'Нечего закрывать.';
@@ -813,7 +825,10 @@
         }
         shiftCloseBoxId = data.id;
         shiftCloseBoxNumber = data.box_number;
-        shiftCloseShift = shift;
+        // Read the persisted shift_date/shift_type off the found row itself,
+        // not a fresh computeShift() call -- this can't drift after the QR
+        // scan/printing spans past a shift boundary.
+        shiftCloseShift = { date: data.shift_date, type: data.shift_type };
         countLine.textContent = 'За смену зафиксировано: ' + data.total_items;
         startBtn.style.display = '';
     }
@@ -842,6 +857,9 @@
 
     let boxLabelTemplateForClose = null;
     let kgtLabelTemplate = null;
+    // Re-entrancy guard: a double-fire (e.g. a retried QR scan that wasn't
+    // properly stopped) must not start a second overlapping print run.
+    let shiftClosePrintInFlight = false;
 
     async function loadCloseTemplates() {
         if (!boxLabelTemplateForClose) {
@@ -856,7 +874,7 @@
 
     async function finishShiftClosePrint(anyFailed, msg, retryBtn) {
         if (anyFailed) {
-            msg.textContent = 'Не всё напечаталось. Проверьте принтер и попробуйте ещё раз.';
+            msg.textContent = 'Не всё получилось. Проверьте принтер и подключение, попробуйте ещё раз.';
             msg.className = 'msg is-error';
             retryBtn.style.display = '';
             return;
@@ -873,120 +891,191 @@
         setTimeout(() => { showScreen('screenEntryType'); }, 1500);
     }
 
-    async function runShiftClosePrint() {
-        showScreen('screenShiftClosePrint');
-        const list = document.getElementById('shiftClosePrintList');
-        const msg = document.getElementById('shiftClosePrintMsg');
-        const retryBtn = document.getElementById('shiftClosePrintRetryBtn');
-        retryBtn.style.display = 'none';
-        msg.textContent = '';
-        msg.className = 'msg';
-        list.textContent = 'Готовлю печать...';
-
-        await loadCloseTemplates();
-        if (!boxLabelTemplateForClose) {
-            list.textContent = '';
-            msg.textContent = 'Шаблон этикетки «Короб «Без ШК»» не найден.';
-            msg.className = 'msg is-error';
-            retryBtn.style.display = '';
-            return;
-        }
-
-        const { data: contentRows, error: contentsError } = await supabaseClient.rpc('wms_no_shk_box_contents', { p_box_id: shiftCloseBoxId });
-        if (contentsError) {
-            list.textContent = '';
-            msg.textContent = 'Не удалось прочитать содержимое короба: ' + contentsError.message;
-            msg.className = 'msg is-error';
-            retryBtn.style.display = '';
-            return;
-        }
-        const { kgtItems } = partitionBoxContents(contentRows || []);
-        if (kgtItems.length && !kgtLabelTemplate) {
-            list.textContent = '';
-            msg.textContent = 'Шаблон этикетки «КГТ «Без ШК»» не найден.';
-            msg.className = 'msg is-error';
-            retryBtn.style.display = '';
-            return;
-        }
-
-        const dateLine1 = formatDateShortClose(shiftCloseShift.date);
-        const dateLine2 = shiftCloseShift.type === 'Ночная' ? formatDateShortClose(addDaysClose(shiftCloseShift.date, 1)) : '';
-
-        const jobsToCreate = [{
-            label: 'Короб',
-            template: boxLabelTemplateForClose,
-            data: {
-                box_code: 'WMSP.BOX.' + String(shiftCloseBoxNumber).padStart(5, '0'),
-                box_number: String(shiftCloseBoxNumber),
-                box_type: 'Короб',
-                area: state.area,
-                date_line1: dateLine1,
-                date_line2: dateLine2,
-                shift: shiftCloseShift.type === 'Ночная' ? 'Ночь' : 'День',
-            },
-        }];
-        kgtItems.forEach((item, i) => {
-            jobsToCreate.push({
-                label: 'КГТ ' + (i + 1) + ' из ' + kgtItems.length,
-                template: kgtLabelTemplate,
-                data: { name: item.item_text, area: state.area, date_line1: dateLine1, date_line2: dateLine2 },
-            });
-        });
-
-        list.innerHTML = '';
-        const jobRows = jobsToCreate.map((j) => {
-            const row = document.createElement('div');
-            row.textContent = j.label + ': в очереди...';
-            list.appendChild(row);
-            return { ...j, rowEl: row, jobId: null };
-        });
-
-        msg.textContent = 'Печатаю...';
-        const results = await Promise.all(jobRows.map((job) => printOneJob(job)));
-        const anyFailed = results.some((r) => !r.ok);
-        void finishShiftClosePrint(anyFailed, msg, retryBtn);
+    // The item_text column allows up to 2000 chars of free user text; the
+    // 50mm КГТ label has no line-wrapping in print-tspl.js's text renderer,
+    // so anything long would run off the edge -- truncate for the sticker.
+    const KGT_LABEL_NAME_MAX_LEN = 28;
+    function truncateForKgtLabel(text) {
+        const s = String(text || '');
+        return s.length > KGT_LABEL_NAME_MAX_LEN ? s.slice(0, KGT_LABEL_NAME_MAX_LEN) + '…' : s;
     }
+
+    async function runShiftClosePrint() {
+        // Re-entrancy guard: a stray double-trigger (e.g. an imperfectly
+        // stopped QR scanner detecting the same code twice) must be a no-op
+        // rather than starting a second overlapping print run.
+        if (shiftClosePrintInFlight) return;
+        shiftClosePrintInFlight = true;
+        try {
+            showScreen('screenShiftClosePrint');
+            const list = document.getElementById('shiftClosePrintList');
+            const msg = document.getElementById('shiftClosePrintMsg');
+            const retryBtn = document.getElementById('shiftClosePrintRetryBtn');
+            retryBtn.style.display = 'none';
+            msg.textContent = '';
+            msg.className = 'msg';
+            list.textContent = 'Готовлю печать...';
+
+            await loadCloseTemplates();
+            if (!boxLabelTemplateForClose) {
+                list.textContent = '';
+                msg.textContent = 'Шаблон этикетки «Короб «Без ШК»» не найден.';
+                msg.className = 'msg is-error';
+                retryBtn.style.display = '';
+                return;
+            }
+
+            const { data: contentRows, error: contentsError } = await supabaseClient.rpc('wms_no_shk_box_contents', { p_box_id: shiftCloseBoxId });
+            if (contentsError) {
+                list.textContent = '';
+                msg.textContent = 'Не удалось прочитать содержимое короба: ' + contentsError.message;
+                msg.className = 'msg is-error';
+                retryBtn.style.display = '';
+                return;
+            }
+            const { kgtItems } = partitionBoxContents(contentRows || []);
+            if (kgtItems.length && !kgtLabelTemplate) {
+                list.textContent = '';
+                msg.textContent = 'Шаблон этикетки «КГТ «Без ШК»» не найден.';
+                msg.className = 'msg is-error';
+                retryBtn.style.display = '';
+                return;
+            }
+
+            const dateLine1 = formatDateShortClose(shiftCloseShift.date);
+            const dateLine2 = shiftCloseShift.type === 'Ночная' ? formatDateShortClose(addDaysClose(shiftCloseShift.date, 1)) : '';
+
+            const jobsToCreate = [{
+                label: 'Короб',
+                template: boxLabelTemplateForClose,
+                data: {
+                    box_code: 'WMSP.BOX.' + String(shiftCloseBoxNumber).padStart(5, '0'),
+                    box_number: String(shiftCloseBoxNumber),
+                    box_type: 'Короб',
+                    area: state.area,
+                    date_line1: dateLine1,
+                    date_line2: dateLine2,
+                    shift: shiftCloseShift.type === 'Ночная' ? 'Ночь' : 'День',
+                },
+            }];
+            kgtItems.forEach((item, i) => {
+                jobsToCreate.push({
+                    label: 'КГТ ' + (i + 1) + ' из ' + kgtItems.length,
+                    template: kgtLabelTemplate,
+                    data: { name: truncateForKgtLabel(item.item_text), area: state.area, date_line1: dateLine1, date_line2: dateLine2 },
+                });
+            });
+
+            list.innerHTML = '';
+            const jobRows = jobsToCreate.map((j) => {
+                const row = document.createElement('div');
+                row.textContent = j.label + ': в очереди...';
+                list.appendChild(row);
+                return { ...j, rowEl: row };
+            });
+
+            msg.textContent = 'Печатаю...';
+            const results = await Promise.all(jobRows.map((job) => printOneJob(job)));
+            const anyFailed = results.some((r) => !r.ok);
+            void finishShiftClosePrint(anyFailed, msg, retryBtn);
+        } finally {
+            shiftClosePrintInFlight = false;
+        }
+    }
+
+    // How long to wait for Realtime to report a terminal print_jobs status
+    // before giving up and checking once by hand -- covers the print-bridge
+    // process not running at all, or the Realtime connection dropping
+    // silently after a successful insert (neither raises a subscribe error).
+    const PRINT_JOB_SAFETY_TIMEOUT_MS = 75000;
 
     async function printOneJob(job) {
         const jobId = crypto.randomUUID();
-        job.jobId = jobId;
         const tspl = buildTsplPayloadBase64(job.template, job.data);
         return new Promise((resolve) => {
             let settled = false;
             let inserted = false;
+            let safetyTimer = null;
+
+            function settle(result) {
+                if (settled) return;
+                settled = true;
+                if (safetyTimer) {
+                    clearTimeout(safetyTimer);
+                    safetyTimer = null;
+                }
+                supabaseClient.removeChannel(channel);
+                resolve(result);
+            }
+
             const channel = supabaseClient
                 .channel('shift_close_print_job_' + jobId)
                 .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'print_jobs', filter: 'id=eq.' + jobId }, (payload) => {
                     const row = payload.new;
                     if (row.status !== 'printed' && row.status !== 'failed') return;
-                    if (settled) return;
-                    settled = true;
                     job.rowEl.textContent = job.label + ': ' + (row.status === 'printed' ? 'напечатано ✓' : 'ошибка (' + (row.error_message || 'неизвестная ошибка') + ')');
-                    supabaseClient.removeChannel(channel);
-                    resolve({ ok: row.status === 'printed' });
+                    settle({ ok: row.status === 'printed' });
                 })
                 .subscribe(async (status) => {
-                    if (status !== 'SUBSCRIBED') return;
-                    if (inserted) return;
-                    inserted = true;
-                    const { error } = await supabaseClient
-                        .from('print_jobs')
-                        .insert({ id: jobId, template_id: job.template.id, data: job.data, tspl, created_by: state.employeeId != null ? String(state.employeeId) : null });
-                    if (error) {
-                        if (settled) return;
-                        settled = true;
-                        job.rowEl.textContent = job.label + ': ошибка постановки в очередь (' + error.message + ')';
-                        supabaseClient.removeChannel(channel);
-                        resolve({ ok: false });
-                    } else {
-                        job.rowEl.textContent = job.label + ': печатаю...';
+                    if (status === 'SUBSCRIBED') {
+                        if (inserted) return;
+                        inserted = true;
+                        const { error } = await supabaseClient
+                            .from('print_jobs')
+                            .insert({ id: jobId, template_id: job.template.id, data: job.data, tspl, created_by: state.employeeId != null ? String(state.employeeId) : null });
+                        if (error) {
+                            job.rowEl.textContent = job.label + ': ошибка постановки в очередь (' + error.message + ')';
+                            settle({ ok: false });
+                        } else {
+                            job.rowEl.textContent = job.label + ': печатаю...';
+                        }
+                        return;
+                    }
+                    // Any other status (CHANNEL_ERROR, TIMED_OUT, CLOSED, or the
+                    // connection just dropping) means we'll never hear about a
+                    // status change over Realtime -- fail this job rather than
+                    // hang forever. The safety-timeout below is the backstop for
+                    // the case where the connection drops *silently* instead
+                    // (no status callback fires at all).
+                    if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+                        job.rowEl.textContent = job.label + ': ошибка подписки на статус: ' + status;
+                        settle({ ok: false });
                     }
                 });
+
+            safetyTimer = setTimeout(async () => {
+                if (settled) return;
+                const { data, error } = await supabaseClient
+                    .from('print_jobs')
+                    .select('status,error_message')
+                    .eq('id', jobId)
+                    .maybeSingle();
+                if (settled) return; // settled via Realtime while this query was in flight
+                if (!error && data && data.status === 'printed') {
+                    job.rowEl.textContent = job.label + ': напечатано ✓';
+                    settle({ ok: true });
+                } else {
+                    const reason = (!error && data && data.status === 'failed' && data.error_message)
+                        ? data.error_message
+                        : 'нет ответа от принтера дольше 75 секунд';
+                    job.rowEl.textContent = job.label + ': ошибка (' + reason + ')';
+                    settle({ ok: false });
+                }
+            }, PRINT_JOB_SAFETY_TIMEOUT_MS);
         });
     }
 
     document.getElementById('shiftClosePrintRetryBtn').addEventListener('click', () => {
         void runShiftClosePrint();
+    });
+
+    // Escape hatch if printing is genuinely stuck (e.g. print-bridge down and
+    // the 75s safety timeout hasn't fired yet). Does NOT flip outside_opp --
+    // any jobs already queued are left as-is; retrying the whole close flow
+    // later just creates additional print_jobs rows (the same accepted
+    // duplicate-print trade-off already documented for the failure path).
+    document.getElementById('backFromShiftClosePrintBtn').addEventListener('click', () => {
+        showScreen('screenShiftClose');
     });
 
     const closeQrMsg = document.getElementById('closeQrMsg');
@@ -1007,6 +1096,11 @@
     }
 
     async function startCloseQrScan() {
+        // Stop any scan already in flight first -- otherwise retrying after a
+        // failed scan (tapping "Попробовать снова") starts a second camera
+        // stream + rAF loop on top of the first, risking the same QR being
+        // detected twice (double print + double close).
+        stopCloseQrScan();
         closeQrScanCancelled = false;
         closeQrMsg.textContent = '';
         closeQrMsg.className = 'msg';
