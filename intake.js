@@ -953,6 +953,7 @@
         const tspl = buildTsplPayloadBase64(job.template, job.data);
         return new Promise((resolve) => {
             let settled = false;
+            let inserted = false;
             const channel = supabaseClient
                 .channel('shift_close_print_job_' + jobId)
                 .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'print_jobs', filter: 'id=eq.' + jobId }, (payload) => {
@@ -966,6 +967,8 @@
                 })
                 .subscribe(async (status) => {
                     if (status !== 'SUBSCRIBED') return;
+                    if (inserted) return;
+                    inserted = true;
                     const { error } = await supabaseClient
                         .from('print_jobs')
                         .insert({ id: jobId, template_id: job.template.id, data: job.data, tspl, created_by: state.employeeId != null ? String(state.employeeId) : null });
