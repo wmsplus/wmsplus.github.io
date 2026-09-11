@@ -49,6 +49,11 @@
 
     // Упаковка has no shift-box concept (every item there is bucketed,
     // never counted into a shift box) -- hide the counter entirely there.
+    // The number itself is scoped to the CURRENT shift's own box only --
+    // older not-yet-closed boxes are never added into it, they just show up
+    // as selectable entries once the plate is tapped (see openShiftCloseList
+    // below). The plate is always tappable now: even when the current shift
+    // has recorded nothing yet, older boxes may still be waiting to close.
     async function refreshShiftCounter() {
         const els = document.querySelectorAll('[data-shift-counter]');
         if (!els.length) return;
@@ -56,24 +61,21 @@
             els.forEach((el) => { el.style.display = 'none'; });
             return;
         }
-        // Deliberately NOT filtered by a freshly computed shift_date/shift_type
-        // (computeShift() flips at 20:00) -- see openShiftClose() below for why.
-        // area + outside_opp alone is what actually determines "the box to close".
+        const shift = computeShift();
         const { data, error } = await supabaseClient
             .from('wms_no_shk_boxes')
             .select('total_items')
             .eq('area', state.area)
+            .eq('shift_date', shift.date)
+            .eq('shift_type', shift.type)
             .eq('outside_opp', true)
-            .order('shift_date', { ascending: true })
-            .order('created_at', { ascending: true })
             .limit(1)
             .maybeSingle();
         const count = error || !data ? 0 : data.total_items;
-        const unlocked = isShiftCloseUnlocked(new Date());
         els.forEach((el) => {
             el.style.display = '';
             el.textContent = 'За смену зафиксировано: ' + count;
-            el.classList.toggle('is-tappable', unlocked);
+            el.classList.add('is-tappable');
         });
     }
 
@@ -162,8 +164,8 @@
         [
             'areaPillEntryText', 'areaPillTypeText', 'areaPillCategoryText', 'areaPillNameText',
             'areaPillPhotoText', 'areaPillStickerText', 'areaPill2ShkText', 'areaPillEmptyText',
-            'areaPillStickerSavedText', 'areaPillInstrText', 'areaPillHubText', 'areaPillCloseText',
-            'areaPillCloseQrText',
+            'areaPillStickerSavedText', 'areaPillInstrText', 'areaPillHubText', 'areaPillCloseListText',
+            'areaPillCloseText', 'areaPillCloseQrText',
         ].forEach((id) => {
             document.getElementById(id).textContent = state.area || '';
         });
@@ -304,8 +306,8 @@
             'shiftHeaderEntry', 'shiftHeaderType', 'shiftHeaderCategory',
             'shiftHeaderName', 'shiftHeaderPhoto', 'shiftHeaderSticker',
             'shiftHeader2Shk', 'shiftHeaderEmpty',
-            'shiftHeaderStickerSaved', 'shiftHeaderInstr', 'shiftHeaderHub', 'shiftHeaderClose',
-            'shiftHeaderCloseQr',
+            'shiftHeaderStickerSaved', 'shiftHeaderInstr', 'shiftHeaderHub', 'shiftHeaderCloseList',
+            'shiftHeaderClose', 'shiftHeaderCloseQr',
         ].forEach((id) => {
             const el = document.getElementById(id);
             if (el) el.textContent = label;
@@ -398,8 +400,8 @@
     [
         'areaPillEntry', 'areaPillType', 'areaPillCategory', 'areaPillName',
         'areaPillPhoto', 'areaPillSticker', 'areaPill2Shk', 'areaPillEmpty',
-        'areaPillStickerSaved', 'areaPillInstr', 'areaPillHub', 'areaPillClose',
-        'areaPillCloseQr',
+        'areaPillStickerSaved', 'areaPillInstr', 'areaPillHub', 'areaPillCloseList',
+        'areaPillClose', 'areaPillCloseQr',
     ].forEach((id) => {
         document.getElementById(id).addEventListener('click', () => {
             stopQrScan();
@@ -788,53 +790,86 @@
             if (!el.classList.contains('is-tappable')) return;
             const active = screens.find((s) => s.classList.contains('is-active'));
             if (active) shiftCloseReturnTo = active.id;
-            void openShiftClose();
+            void openShiftCloseList();
         });
     });
 
-    async function openShiftClose() {
-        showScreen('screenShiftClose');
-        const countLine = document.getElementById('shiftCloseCount');
-        const startBtn = document.getElementById('shiftCloseStartBtn');
-        const msg = document.getElementById('shiftCloseMsg');
-        msg.textContent = '';
+    // Lists every box outside ОПП for the area: older (previous-shift) boxes
+    // are always listed, ready to close any time -- they're the ones that
+    // were "still not brought in". The box actively forming for the CURRENT
+    // shift is included only once isCurrentShiftBoxUnlocked() opens (last 30
+    // minutes of that shift), same as the old single-box flow's gate, just
+    // now scoped to one row instead of gating the whole plate.
+    async function openShiftCloseList() {
+        showScreen('screenShiftCloseList');
+        const container = document.getElementById('shiftCloseListContainer');
+        const msg = document.getElementById('shiftCloseListMsg');
+        container.innerHTML = '';
+        msg.textContent = 'Загружаю...';
         msg.className = 'msg';
-        startBtn.style.display = 'none';
-        countLine.textContent = 'Проверяю...';
-        // Same query shape as refreshShiftCounter(): area + outside_opp only,
-        // oldest first -- NOT a freshly computed shift_date/shift_type (that
-        // flips at 20:00, right in the middle of a realistic close-flow
-        // duration, which would make the query miss the day box entirely).
-        // Ordering oldest-first handles the edge case where a day box was
-        // left open past 20:00 while a new night box has already started
-        // forming for the same area: this deterministically picks the older
-        // (day) box first; running the close flow again afterward would then
-        // find the newer (night) one.
+
         const { data, error } = await supabaseClient
             .from('wms_no_shk_boxes')
             .select('id,total_items,box_number,shift_date,shift_type')
             .eq('area', state.area)
             .eq('outside_opp', true)
             .order('shift_date', { ascending: true })
-            .order('created_at', { ascending: true })
-            .limit(1)
-            .maybeSingle();
-        if (error || !data || !data.total_items) {
-            countLine.textContent = 'Нечего закрывать.';
+            .order('created_at', { ascending: true });
+
+        if (error) {
+            msg.textContent = 'Не удалось загрузить список: ' + error.message;
+            msg.className = 'msg is-error';
             return;
         }
-        shiftCloseBoxId = data.id;
-        shiftCloseBoxNumber = data.box_number;
-        // Read the persisted shift_date/shift_type off the found row itself,
+
+        const shift = computeShift();
+        const now = new Date();
+        const boxes = (data || []).filter((box) => {
+            const isCurrentShiftBox = box.shift_date === shift.date && box.shift_type === shift.type;
+            return !isCurrentShiftBox || isCurrentShiftBoxUnlocked(now);
+        });
+
+        if (!boxes.length) {
+            msg.textContent = 'Нечего закрывать.';
+            return;
+        }
+        msg.textContent = '';
+        boxes.forEach((box) => {
+            const item = document.createElement('button');
+            item.type = 'button';
+            item.className = 'shift-close-list-item';
+            item.textContent = 'Короб №' + box.box_number + ' — ' + box.total_items + ' шт. — ' +
+                formatDateShortClose(box.shift_date) + ', ' + (box.shift_type === 'Ночная' ? 'ночная смена' : 'дневная смена');
+            item.addEventListener('click', () => openShiftCloseConfirm(box));
+            container.appendChild(item);
+        });
+    }
+
+    document.getElementById('backFromCloseListBtn').addEventListener('click', () => {
+        showScreen(shiftCloseReturnTo);
+    });
+
+    // Confirmation screen for one specific box chosen from the list --
+    // reuses the box data the list already fetched, no re-query needed.
+    function openShiftCloseConfirm(box) {
+        shiftCloseBoxId = box.id;
+        shiftCloseBoxNumber = box.box_number;
+        // Read the persisted shift_date/shift_type off the chosen row itself,
         // not a fresh computeShift() call -- this can't drift after the QR
         // scan/printing spans past a shift boundary.
-        shiftCloseShift = { date: data.shift_date, type: data.shift_type };
-        countLine.textContent = 'За смену зафиксировано: ' + data.total_items;
+        shiftCloseShift = { date: box.shift_date, type: box.shift_type };
+        showScreen('screenShiftClose');
+        const countLine = document.getElementById('shiftCloseCount');
+        const startBtn = document.getElementById('shiftCloseStartBtn');
+        const msg = document.getElementById('shiftCloseMsg');
+        msg.textContent = '';
+        msg.className = 'msg';
+        countLine.textContent = 'За смену зафиксировано: ' + box.total_items;
         startBtn.style.display = '';
     }
 
-    document.getElementById('backToPhotoFromCloseBtn').addEventListener('click', () => {
-        showScreen(shiftCloseReturnTo);
+    document.getElementById('backToListFromCloseBtn').addEventListener('click', () => {
+        showScreen('screenShiftCloseList');
     });
 
     document.getElementById('shiftCloseStartBtn').addEventListener('click', () => {

@@ -6,15 +6,17 @@
 // that confirms the worker is physically there before printing/closing.
 const SHIFT_CLOSE_QR_VALUE = "WMSP.PLCE.WSHK.FLR";
 
-// Hard gate: the shift counter only becomes tappable from 19:30 local
-// time onward, no upper bound within that window -- it stays tappable
-// through the rest of the day and night until used. The early-morning
-// side of that window mirrors intake.js's own computeShift() day/night
-// boundary (day shift starts at 8:00), so this stays unlocked for the
-// entire night shift rather than an arbitrary cutoff.
-function isShiftCloseUnlocked(date) {
-    const totalMinutes = date.getHours() * 60 + date.getMinutes();
-    return totalMinutes >= (19 * 60 + 30) || date.getHours() < 8;
+// Hard gate for the box actively forming the CURRENT shift (not older,
+// already-finished-shift boxes, which have no time gate at all): it only
+// becomes closeable in the last 30 minutes of its own shift, mirroring
+// intake.js's computeShift() day/night boundary (day 8:00-20:00, night
+// 20:00-8:00) -- day's box unlocks at 19:30, night's at 7:30.
+function isCurrentShiftBoxUnlocked(date) {
+    const hour = date.getHours();
+    if (hour >= 8 && hour < 20) {
+        return hour === 19 && date.getMinutes() >= 30;
+    }
+    return hour === 7 && date.getMinutes() >= 30;
 }
 
 // Splits wms_no_shk_box_contents() rows into the ones that need their own
@@ -29,5 +31,5 @@ function partitionBoxContents(rows) {
 }
 
 if (typeof module !== "undefined" && module.exports) {
-    module.exports = { SHIFT_CLOSE_QR_VALUE, isShiftCloseUnlocked, partitionBoxContents };
+    module.exports = { SHIFT_CLOSE_QR_VALUE, isCurrentShiftBoxUnlocked, partitionBoxContents };
 }

@@ -209,6 +209,27 @@
         border-color: var(--accent);
     }
 
+    .shift-close-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        width: 100%;
+    }
+    .shift-close-list-item {
+        width: 100%;
+        text-align: left;
+        padding: 14px 16px;
+        border: 1px solid rgba(36,32,56,.18);
+        border-radius: var(--radius-md);
+        background: #fff;
+        color: var(--muted);
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        font-family: inherit;
+    }
+    .shift-close-list-item:active { background: var(--bg); }
+
     .category-grid {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
@@ -454,10 +475,21 @@
     </div>
 </section>
 
+<section id="screenShiftCloseList" class="screen">
+    <div id="areaPillCloseList" class="area-pill"><span id="areaPillCloseListText"></span> ✎</div>
+    <div id="shiftHeaderCloseList" class="shift-header"></div>
+    <button id="backFromCloseListBtn" class="back-btn" type="button">←</button>
+    <div class="screen-card" style="text-align:center;">
+        <h1>Короба вне ОПП</h1>
+        <div id="shiftCloseListContainer" class="shift-close-list"></div>
+        <div id="shiftCloseListMsg" class="msg"></div>
+    </div>
+</section>
+
 <section id="screenShiftClose" class="screen">
     <div id="areaPillClose" class="area-pill"><span id="areaPillCloseText"></span> ✎</div>
     <div id="shiftHeaderClose" class="shift-header"></div>
-    <button id="backToPhotoFromCloseBtn" class="back-btn" type="button">←</button>
+    <button id="backToListFromCloseBtn" class="back-btn" type="button">←</button>
     <div class="screen-card" style="text-align:center;">
         <h1>Закрыть коробку</h1>
         <p id="shiftCloseCount" style="margin:0 0 16px;font-size:14px;"></p>

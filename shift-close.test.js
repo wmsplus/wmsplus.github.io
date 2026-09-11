@@ -1,6 +1,6 @@
 // shift-close.test.js — run with: node shift-close.test.js
 const assert = require("node:assert");
-const { SHIFT_CLOSE_QR_VALUE, isShiftCloseUnlocked, partitionBoxContents } = require("./shift-close.js");
+const { SHIFT_CLOSE_QR_VALUE, isCurrentShiftBoxUnlocked, partitionBoxContents } = require("./shift-close.js");
 
 function test(name, fn) {
     try {
@@ -17,17 +17,28 @@ test("SHIFT_CLOSE_QR_VALUE matches the physical QR placed in the revision office
     assert.strictEqual(SHIFT_CLOSE_QR_VALUE, "WMSP.PLCE.WSHK.FLR");
 });
 
-test("isShiftCloseUnlocked is false before 19:30", () => {
-    assert.strictEqual(isShiftCloseUnlocked(new Date(2026, 0, 1, 10, 0)), false);
-    assert.strictEqual(isShiftCloseUnlocked(new Date(2026, 0, 1, 19, 29)), false);
-    assert.strictEqual(isShiftCloseUnlocked(new Date(2026, 0, 1, 8, 0)), false);
+test("isCurrentShiftBoxUnlocked is false during most of the day shift", () => {
+    assert.strictEqual(isCurrentShiftBoxUnlocked(new Date(2026, 0, 1, 8, 0)), false);
+    assert.strictEqual(isCurrentShiftBoxUnlocked(new Date(2026, 0, 1, 10, 0)), false);
+    assert.strictEqual(isCurrentShiftBoxUnlocked(new Date(2026, 0, 1, 19, 29)), false);
 });
 
-test("isShiftCloseUnlocked is true from 19:30 onward, no upper bound", () => {
-    assert.strictEqual(isShiftCloseUnlocked(new Date(2026, 0, 1, 19, 30)), true);
-    assert.strictEqual(isShiftCloseUnlocked(new Date(2026, 0, 1, 23, 59)), true);
-    assert.strictEqual(isShiftCloseUnlocked(new Date(2026, 0, 1, 3, 0)), true);
-    assert.strictEqual(isShiftCloseUnlocked(new Date(2026, 0, 1, 7, 59)), true);
+test("isCurrentShiftBoxUnlocked is true in the day shift's last 30 minutes only", () => {
+    assert.strictEqual(isCurrentShiftBoxUnlocked(new Date(2026, 0, 1, 19, 30)), true);
+    assert.strictEqual(isCurrentShiftBoxUnlocked(new Date(2026, 0, 1, 19, 59)), true);
+    assert.strictEqual(isCurrentShiftBoxUnlocked(new Date(2026, 0, 1, 20, 0)), false);
+});
+
+test("isCurrentShiftBoxUnlocked is false during most of the night shift", () => {
+    assert.strictEqual(isCurrentShiftBoxUnlocked(new Date(2026, 0, 1, 20, 0)), false);
+    assert.strictEqual(isCurrentShiftBoxUnlocked(new Date(2026, 0, 1, 23, 59)), false);
+    assert.strictEqual(isCurrentShiftBoxUnlocked(new Date(2026, 0, 1, 3, 0)), false);
+    assert.strictEqual(isCurrentShiftBoxUnlocked(new Date(2026, 0, 1, 7, 29)), false);
+});
+
+test("isCurrentShiftBoxUnlocked is true in the night shift's last 30 minutes only", () => {
+    assert.strictEqual(isCurrentShiftBoxUnlocked(new Date(2026, 0, 1, 7, 30)), true);
+    assert.strictEqual(isCurrentShiftBoxUnlocked(new Date(2026, 0, 1, 7, 59)), true);
 });
 
 test("partitionBoxContents pulls out only КГТ rows, preserving order", () => {
