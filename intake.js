@@ -941,50 +941,44 @@
             return { ...j, rowEl: row, jobId: null };
         });
 
-        let insertError = null;
-        for (const job of jobRows) {
-            const tspl = buildTsplPayloadBase64(job.template, job.data);
-            const { data: inserted, error } = await supabaseClient
-                .from('print_jobs')
-                .insert({ template_id: job.template.id, data: job.data, tspl, created_by: state.employeeId != null ? String(state.employeeId) : null })
-                .select('id,status')
-                .single();
-            if (error) {
-                insertError = error;
-                job.rowEl.textContent = job.label + ': ошибка постановки в очередь (' + error.message + ')';
-                continue;
-            }
-            job.jobId = inserted.id;
-            job.rowEl.textContent = job.label + ': печатаю...';
-        }
-        if (insertError) {
-            msg.textContent = 'Не удалось поставить все стикеры в очередь.';
-            msg.className = 'msg is-error';
-            retryBtn.style.display = '';
-            return;
-        }
-
         msg.textContent = 'Печатаю...';
-        let remaining = jobRows.length;
-        let anyFailed = false;
-        jobRows.forEach((job) => {
+        const results = await Promise.all(jobRows.map((job) => printOneJob(job)));
+        const anyFailed = results.some((r) => !r.ok);
+        void finishShiftClosePrint(anyFailed, msg, retryBtn);
+    }
+
+    async function printOneJob(job) {
+        const jobId = crypto.randomUUID();
+        job.jobId = jobId;
+        const tspl = buildTsplPayloadBase64(job.template, job.data);
+        return new Promise((resolve) => {
+            let settled = false;
             const channel = supabaseClient
-                .channel('shift_close_print_job_' + job.jobId)
-                .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'print_jobs', filter: 'id=eq.' + job.jobId }, (payload) => {
+                .channel('shift_close_print_job_' + jobId)
+                .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'print_jobs', filter: 'id=eq.' + jobId }, (payload) => {
                     const row = payload.new;
-                    if (row.status === 'printed') {
-                        job.rowEl.textContent = job.label + ': напечатано ✓';
-                    } else if (row.status === 'failed') {
-                        job.rowEl.textContent = job.label + ': ошибка (' + (row.error_message || 'неизвестная ошибка') + ')';
-                        anyFailed = true;
-                    } else {
-                        return;
-                    }
-                    remaining -= 1;
+                    if (row.status !== 'printed' && row.status !== 'failed') return;
+                    if (settled) return;
+                    settled = true;
+                    job.rowEl.textContent = job.label + ': ' + (row.status === 'printed' ? 'напечатано ✓' : 'ошибка (' + (row.error_message || 'неизвестная ошибка') + ')');
                     supabaseClient.removeChannel(channel);
-                    if (remaining === 0) void finishShiftClosePrint(anyFailed, msg, retryBtn);
+                    resolve({ ok: row.status === 'printed' });
                 })
-                .subscribe();
+                .subscribe(async (status) => {
+                    if (status !== 'SUBSCRIBED') return;
+                    const { error } = await supabaseClient
+                        .from('print_jobs')
+                        .insert({ id: jobId, template_id: job.template.id, data: job.data, tspl, created_by: state.employeeId != null ? String(state.employeeId) : null });
+                    if (error) {
+                        if (settled) return;
+                        settled = true;
+                        job.rowEl.textContent = job.label + ': ошибка постановки в очередь (' + error.message + ')';
+                        supabaseClient.removeChannel(channel);
+                        resolve({ ok: false });
+                    } else {
+                        job.rowEl.textContent = job.label + ': печатаю...';
+                    }
+                });
         });
     }
 
