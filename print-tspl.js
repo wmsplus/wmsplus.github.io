@@ -30,17 +30,86 @@ function resolveElementValue(element, data) {
 
 const VALID_ROTATIONS = [0, 90, 180, 270];
 
+// TSC's built-in bitmap font "3" (the only font textCommand ever uses) has
+// a nominal cell size of 16x24 dots at its base 1x multiplier, per the
+// TSPL2 programming manual -- like PRINTER_DPI above, this has NOT been
+// confirmed against the physical DA220; adjust here if on-site testing
+// shows otherwise. Used to estimate how many characters/lines of text
+// actually fit in a given mm budget for wrap_width_mm below.
+const FONT3_CHAR_WIDTH_MM_AT_MULT1 = 16 / DOTS_PER_MM;
+const FONT3_CHAR_HEIGHT_MM_AT_MULT1 = 24 / DOTS_PER_MM;
+
+// Greedy word-wrap into at most maxLines lines of at most maxCharsPerLine
+// characters each. A word wider than one line is hard-broken (no narrower
+// unit to wrap on); content that still doesn't fit within maxLines is
+// truncated with an ellipsis on the last line -- this is a label, not a
+// document, there's no more room to give it.
+function wrapText(value, maxCharsPerLine, maxLines) {
+    const words = String(value == null ? "" : value).split(/\s+/).filter(Boolean);
+    const lines = [];
+    let current = "";
+    let i = 0;
+
+    function pushCurrent() {
+        if (current) { lines.push(current); current = ""; }
+    }
+
+    while (i < words.length && lines.length < maxLines) {
+        const word = words[i];
+        if (word.length > maxCharsPerLine) {
+            pushCurrent();
+            if (lines.length >= maxLines) break;
+            lines.push(word.slice(0, maxCharsPerLine));
+            words[i] = word.slice(maxCharsPerLine); // remainder retried next iteration
+            continue;
+        }
+        const candidate = current ? current + " " + word : word;
+        if (candidate.length <= maxCharsPerLine) {
+            current = candidate;
+            i++;
+        } else {
+            pushCurrent();
+        }
+    }
+    if (lines.length < maxLines) pushCurrent();
+
+    const usedAllInput = i >= words.length && !current;
+    if (lines.length > maxLines) lines.length = maxLines;
+    if (!usedAllInput && lines.length) {
+        const last = lines[lines.length - 1];
+        const budget = Math.max(0, maxCharsPerLine - 1);
+        lines[lines.length - 1] = (last.length > budget ? last.slice(0, budget) : last) + "…";
+    }
+    return lines.length ? lines : [""];
+}
+
 function textCommand(element, data) {
     const x = mmToDots(element.x_mm);
     const y = mmToDots(element.y_mm);
-    const value = tsplEscape(resolveElementValue(element, data));
+    const value = resolveElementValue(element, data);
     // Built-in font "3" (a mid-size bitmap font); font_size scales it via
     // the x/y multiplier args (TSPL takes integer multipliers, not a
     // point size) -- font_size 10 -> multiplier 1, roughly doubling per
     // +10, clamped to TSPL's 1-10 multiplier range.
     const mult = Math.min(10, Math.max(1, Math.round((Number(element.font_size) || 10) / 10)));
     const rotation = VALID_ROTATIONS.indexOf(Number(element.rotation)) !== -1 ? Number(element.rotation) : 0;
-    return `TEXT ${x},${y},"3",${rotation},${mult},${mult},"${value}"`;
+
+    // wrap_width_mm opts an element into multi-line word-wrap instead of a
+    // single fixed-width TEXT command -- everything else (barcode, qr,
+    // single-line text) is unaffected, this only activates when a template
+    // explicitly sets it (e.g. the "КГТ «Без ШК»" name field, which needs
+    // to fit long free-text item names on a small label).
+    if (element.wrap_width_mm) {
+        const maxCharsPerLine = Math.max(1, Math.floor(Number(element.wrap_width_mm) / (FONT3_CHAR_WIDTH_MM_AT_MULT1 * mult)));
+        const maxLines = Math.max(1, Number(element.max_lines) || 2);
+        const lineHeightMm = Number(element.line_height_mm) || Math.round(FONT3_CHAR_HEIGHT_MM_AT_MULT1 * mult * 1.5);
+        const lines = wrapText(value, maxCharsPerLine, maxLines);
+        return lines
+            .map((line, i) => `TEXT ${x},${y + mmToDots(lineHeightMm * i)},"3",${rotation},${mult},${mult},"${tsplEscape(line)}"`)
+            .join("\r\n");
+    }
+
+    return `TEXT ${x},${y},"3",${rotation},${mult},${mult},"${tsplEscape(value)}"`;
 }
 
 function barcodeCommand(element, data) {
@@ -173,5 +242,5 @@ function buildTsplPayloadBase64(template, data) {
 // Plain global-scope exports (this repo has no module system) plus a
 // CommonJS export so print-tspl.test.js (Node, no browser) can require it.
 if (typeof module !== "undefined" && module.exports) {
-    module.exports = { buildTsplFromTemplate, buildTsplPayloadBase64, cp1251Encode, bytesToBase64, mmToDots, tsplEscape };
+    module.exports = { buildTsplFromTemplate, buildTsplPayloadBase64, cp1251Encode, bytesToBase64, mmToDots, tsplEscape, wrapText };
 }

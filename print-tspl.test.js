@@ -1,6 +1,6 @@
 // print-tspl.test.js — run with: node print-tspl.test.js
 const assert = require("node:assert");
-const { buildTsplFromTemplate, buildTsplPayloadBase64, cp1251Encode, bytesToBase64, mmToDots, tsplEscape } = require("./print-tspl.js");
+const { buildTsplFromTemplate, buildTsplPayloadBase64, cp1251Encode, bytesToBase64, mmToDots, tsplEscape, wrapText } = require("./print-tspl.js");
 
 function test(name, fn) {
     try {
@@ -75,6 +75,48 @@ test("buildTsplFromTemplate emits two BAR commands for a cross element", () => {
     // Bars centered within the 80x80 box: offset (80-16)/2=32 -> 40+32=72.
     assert.ok(tspl.includes("BAR 72,40,16,80"));
     assert.ok(tspl.includes("BAR 40,72,80,16"));
+});
+
+test("wrapText fills lines greedily on word boundaries", () => {
+    assert.deepStrictEqual(wrapText("Увлажнитель воздуха ультразвуковой", 20, 2), ["Увлажнитель воздуха", "ультразвуковой"]);
+});
+
+test("wrapText hard-breaks a single word longer than one line", () => {
+    assert.deepStrictEqual(wrapText("Суперкалифраджилистикэкспиалидоциус", 10, 2), ["Суперкалиф", "раджилист…"]);
+});
+
+test("wrapText truncates with an ellipsis when content exceeds maxLines", () => {
+    const lines = wrapText("один два три четыре пять шесть", 8, 2);
+    assert.strictEqual(lines.length, 2);
+    assert.ok(lines[1].endsWith("…"));
+});
+
+test("wrapText returns the text as-is when it fits on one line", () => {
+    assert.deepStrictEqual(wrapText("Стол", 20, 2), ["Стол"]);
+});
+
+test("wrapText handles empty input", () => {
+    assert.deepStrictEqual(wrapText("", 20, 2), [""]);
+    assert.deepStrictEqual(wrapText(null, 20, 2), [""]);
+});
+
+test("buildTsplFromTemplate wraps a text element with wrap_width_mm into multiple TEXT lines", () => {
+    const template = {
+        width_mm: 50,
+        height_mm: 50,
+        elements: [{ type: "text", field: "name", x_mm: 5, y_mm: 7, font_size: 14, wrap_width_mm: 42, line_height_mm: 9, max_lines: 2 }],
+    };
+    const tspl = buildTsplFromTemplate(template, { name: "Увлажнитель воздуха ультразвуковой" });
+    // x_mm 5 -> 40 dots; y_mm 7 -> 56 dots; line_height_mm 9 -> 72 dots per line.
+    assert.ok(tspl.includes('TEXT 40,56,"3",0,1,1,"Увлажнитель воздуха"'));
+    assert.ok(tspl.includes('TEXT 40,128,"3",0,1,1,"ультразвуковой"'));
+});
+
+test("buildTsplFromTemplate leaves non-wrapped text elements on a single TEXT line", () => {
+    const template = { width_mm: 50, height_mm: 50, elements: [{ type: "text", field: "name", x_mm: 5, y_mm: 7, font_size: 14 }] };
+    const tspl = buildTsplFromTemplate(template, { name: "Очень длинное наименование товара для теста" });
+    const textLines = tspl.split("\r\n").filter((line) => line.startsWith("TEXT"));
+    assert.strictEqual(textLines.length, 1);
 });
 
 test("buildTsplFromTemplate throws on an unknown element type", () => {
