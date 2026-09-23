@@ -783,7 +783,29 @@
     let shiftCloseReturnTo = 'screenItemType';
     let shiftCloseBoxId = null;
     let shiftCloseBoxNumber = null;
+    let shiftCloseBoxTotalItems = null;
     let shiftCloseShift = null;
+
+    // Best-effort "show the QR on the warehouse display" signal for
+    // display.html (WMSplus-main) -- a Realtime Broadcast, not a table
+    // write, since there's nothing here worth persisting: it's a one-off
+    // "someone just tapped Закрыть короб" heads-up, not state. Subscribed
+    // once at page load (not lazily on first tap) so it's already
+    // connected by the time the button is actually pressed. If the display
+    // page happens to be offline or the broadcast is missed, nothing here
+    // is affected -- the physical QR sticker in the revision office still
+    // works exactly as before.
+    const displayBroadcastChannel = supabaseClient.channel('shift_close_display');
+    let displayBroadcastReady = false;
+    displayBroadcastChannel.subscribe((status) => { displayBroadcastReady = status === 'SUBSCRIBED'; });
+    function notifyDisplayShowQr() {
+        if (!displayBroadcastReady) return;
+        void displayBroadcastChannel.send({
+            type: 'broadcast',
+            event: 'show_qr',
+            payload: { area: state.area, box_number: shiftCloseBoxNumber, total_items: shiftCloseBoxTotalItems },
+        });
+    }
 
     document.querySelectorAll('[data-shift-counter]').forEach((el) => {
         el.addEventListener('click', () => {
@@ -854,6 +876,7 @@
     function openShiftCloseConfirm(box) {
         shiftCloseBoxId = box.id;
         shiftCloseBoxNumber = box.box_number;
+        shiftCloseBoxTotalItems = box.total_items;
         // Read the persisted shift_date/shift_type off the chosen row itself,
         // not a fresh computeShift() call -- this can't drift after the QR
         // scan/printing spans past a shift boundary.
@@ -875,6 +898,7 @@
     document.getElementById('shiftCloseStartBtn').addEventListener('click', () => {
         showScreen('screenShiftCloseQr');
         startCloseQrScan();
+        notifyDisplayShowQr();
     });
 
     // ---------- QR scan for revision-office location check (shift-box closing) ----------
