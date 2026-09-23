@@ -927,12 +927,43 @@
     }
 
     // The item_text column allows up to 2000 chars of free user text; the
-    // 50mm КГТ label has no line-wrapping in print-tspl.js's text renderer,
-    // so anything long would run off the edge -- truncate for the sticker.
-    const KGT_LABEL_NAME_MAX_LEN = 28;
-    function truncateForKgtLabel(text) {
+    // 50mm КГТ label has no line-wrapping in print-tspl.js's text renderer
+    // (a single fixed-size TEXT command, nothing reflows), so anything long
+    // would run off the edge -- truncate for the sticker.
+    //
+    // The max length used to be a bare constant (28), calibrated once for
+    // whatever font_size the "name" field happened to have at the time.
+    // When font_size was later bumped for visual prominence (24 -> 30,
+    // see the print_label_templates migration), the truncation length
+    // never got recalculated to match -- names started printing off the
+    // right edge of the label. Fixed by computing the budget from the
+    // template's own geometry every time instead of a hardcoded number,
+    // so it can't drift out of sync again, including from a future
+    // font_size/x_mm/width_mm tweak made live in print_templates_admin.html
+    // with no code change at all.
+    //
+    // TSC's built-in bitmap font "3" (the only font print-tspl.js's
+    // textCommand ever uses) has a nominal cell width of 16 dots at its
+    // base 1x multiplier per the TSPL2 programming manual -- like
+    // print-tspl.js's own PRINTER_DPI constant, this has NOT been confirmed
+    // against the physical DA220; adjust here if on-site testing shows
+    // otherwise.
+    const KGT_FONT3_CHAR_WIDTH_MM_AT_MULT1 = 16 / (203 / 25.4);
+    // Clearance from the label's right edge -- print registration/mechanical
+    // tolerance on top of the text's own width, not just character count.
+    const KGT_LABEL_RIGHT_MARGIN_MM = 3;
+
+    function kgtLabelNameMaxLen(template) {
+        const nameElement = (template.elements || []).find((el) => el.field === 'name');
+        if (!nameElement) return 28; // fallback if the template shape is ever unexpectedly different
+        const mult = Math.min(10, Math.max(1, Math.round((Number(nameElement.font_size) || 10) / 10)));
+        const availableMm = Number(template.width_mm || 50) - Number(nameElement.x_mm || 0) - KGT_LABEL_RIGHT_MARGIN_MM;
+        return Math.max(1, Math.floor(availableMm / (KGT_FONT3_CHAR_WIDTH_MM_AT_MULT1 * mult)));
+    }
+
+    function truncateForKgtLabel(text, maxLen) {
         const s = String(text || '');
-        return s.length > KGT_LABEL_NAME_MAX_LEN ? s.slice(0, KGT_LABEL_NAME_MAX_LEN) + '…' : s;
+        return s.length > maxLen ? s.slice(0, maxLen) + '…' : s;
     }
 
     async function runShiftClosePrint() {
@@ -993,11 +1024,12 @@
                     shift: shiftCloseShift.type === 'Ночная' ? 'Ночь' : 'День',
                 },
             }];
+            const kgtNameMaxLen = kgtLabelTemplate ? kgtLabelNameMaxLen(kgtLabelTemplate) : 28;
             kgtItems.forEach((item, i) => {
                 jobsToCreate.push({
                     label: 'КГТ ' + (i + 1) + ' из ' + kgtItems.length,
                     template: kgtLabelTemplate,
-                    data: { name: truncateForKgtLabel(item.item_text), area: state.area, date_line1: dateLine1, date_line2: dateLine2 },
+                    data: { name: truncateForKgtLabel(item.item_text, kgtNameMaxLen), area: state.area, date_line1: dateLine1, date_line2: dateLine2 },
                 });
             });
 
