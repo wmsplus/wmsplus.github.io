@@ -1,6 +1,6 @@
 // print-tspl.test.js — run with: node print-tspl.test.js
 const assert = require("node:assert");
-const { buildTsplFromTemplate, buildTsplPayloadBase64, cp1251Encode, bytesToBase64, mmToDots, tsplEscape, wrapText } = require("./print-tspl.js");
+const { buildTsplFromTemplate, buildTsplPayloadBase64, cp1251Encode, bytesToBase64, mmToDots, tsplEscape, wrapText, estimateQrModuleCount } = require("./print-tspl.js");
 
 function test(name, fn) {
     try {
@@ -53,7 +53,46 @@ test("buildTsplFromTemplate emits a BARCODE command for type=barcode", () => {
 test("buildTsplFromTemplate emits a QRCODE command for type=qr", () => {
     const template = { width_mm: 50, height_mm: 50, elements: [{ type: "qr", field: "url", x_mm: 5, y_mm: 5, width_mm: 20 }] };
     const tspl = buildTsplFromTemplate(template, { url: "https://example.com" });
-    assert.ok(tspl.includes('QRCODE 40,40,M,4,A,0,"https://example.com"'));
+    // "https://example.com" (20 chars, mixed-case -> byte mode) is version
+    // 2 (25 modules, byte capacity 26) -- cellSize = round(mmToDots(20)/25) = 6.
+    assert.ok(tspl.includes('QRCODE 40,40,M,6,A,0,"https://example.com"'));
+});
+
+test("estimateQrModuleCount: short alphanumeric code (box_code-shaped) is version 1 (21 modules), not a flat 40", () => {
+    // This is the exact regression this fix targets -- "WMSP.BOX.00042"
+    // (14 chars, all uppercase/digits/dots -> alphanumeric mode, capacity
+    // 20 at version 1) was being sized as if it were ~40 modules, so the
+    // printed QR came out at roughly half its intended physical size.
+    assert.strictEqual(estimateQrModuleCount("WMSP.BOX.00042"), 21);
+});
+
+test("estimateQrModuleCount: shelf_code-shaped alphanumeric string is also version 1", () => {
+    assert.strictEqual(estimateQrModuleCount("WMSP.PLCE.WSHK.01.03"), 21);
+});
+
+test("estimateQrModuleCount: lowercase content (a uuid-based pairing code) uses byte mode, not alphanumeric", () => {
+    // Byte-mode capacity is much lower per version than alphanumeric --
+    // this same length in alphanumeric mode would fit version 1 (capacity
+    // 20), but lowercase hex + dashes forces byte mode (capacity 14 at
+    // version 1), landing on a bigger version instead.
+    const pairingCode = "WMSP.INV." + "a1b2c3d4-1234-5678-9abc-def012345678";
+    assert.strictEqual(estimateQrModuleCount(pairingCode), 4 * 4 + 17); // 45 chars: byte capacity 42 at v3 (29 modules) is too small -> v4 (33 modules) (33)
+});
+
+test("estimateQrModuleCount: capacity-boundary values round to the correct version, not one off", () => {
+    // Alphanumeric capacity at version 1 is exactly 20 chars.
+    assert.strictEqual(estimateQrModuleCount("A".repeat(20)), 21);
+    assert.strictEqual(estimateQrModuleCount("A".repeat(21)), 25);
+});
+
+test("qrCommand cellSize now targets the box_code label's actual intended physical size", () => {
+    const template = { width_mm: 50, height_mm: 50, elements: [{ type: "qr", field: "box_code", x_mm: 5, y_mm: 5, width_mm: 20 }] };
+    const tspl = buildTsplFromTemplate(template, { box_code: "WMSP.BOX.00042" });
+    // Before this fix: cellSize = round(mmToDots(20)/40) = 4, giving an
+    // ACTUAL printed size of 4*21 dots =~10.5mm despite width_mm:20. After:
+    // cellSize = round(mmToDots(20)/21) = 8, giving 8*21 dots =~20.9mm --
+    // matching width_mm as intended.
+    assert.ok(tspl.includes('QRCODE 40,40,M,8,A,0,"WMSP.BOX.00042"'));
 });
 
 test("buildTsplFromTemplate emits a rotated TEXT command when rotation is set", () => {

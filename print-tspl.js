@@ -123,16 +123,58 @@ function barcodeCommand(element, data) {
     return `BARCODE ${x},${y},"${type}",${height},1,0,2,2,"${value}"`;
 }
 
+// QR error-correction-level M capacity (max characters) by version, for
+// the two encoding modes every QR value in this app actually uses -- a
+// short uppercase/digit/symbol code (Alphanumeric mode: box_code,
+// shelf_code, "WMSP.PLCE.WSHK...") or a longer mixed-case string (Byte
+// mode, e.g. "WMSP.INV." + a lowercase-hex session uuid). Row index i
+// is version i+1; module count for a version is 4*version+17 (the
+// standard QR side-length formula). Index by whichever mode `value`
+// actually is, pick the first version whose capacity covers its length.
+const QR_ECC_M_CAPACITY = [
+    // [alphanumeric, byte]
+    [20, 14], [38, 26], [61, 42], [90, 62], [122, 84],
+    [154, 106], [178, 122], [221, 152], [262, 180], [311, 213],
+];
+const QR_ALPHANUMERIC_RE = /^[A-Z0-9 $%*+\-./:]*$/;
+
+// A QR's cellSize (dots per module) only controls PER-MODULE size --
+// the printer itself decides the actual module COUNT from the data
+// length/mode/ECC level, which this app's code never sees. The previous
+// version of this function assumed a flat ~40 modules regardless of
+// content and picked cellSize to fit width_mm against that guess -- but
+// every real value here (14-20 char alphanumeric codes) is versions
+// 1-2, only ~21-25 modules, so the ACTUAL printed size came out at
+// roughly HALF of width_mm. That silently made every box/shelf QR
+// sticker in this app print much smaller and denser than intended,
+// which is the leading suspect for real-world "phone camera can't
+// scan this QR reliably" reports -- estimating the true module count
+// from the value itself (rather than a fixed guess) fixes the size for
+// any FUTURE print/reprint; it can't retroactively fix stickers already
+// printed at the old (smaller) size.
+function estimateQrModuleCount(value) {
+    const isAlphanumeric = QR_ALPHANUMERIC_RE.test(value);
+    const len = value.length;
+    for (let v = 0; v < QR_ECC_M_CAPACITY.length; v++) {
+        const capacity = QR_ECC_M_CAPACITY[v][isAlphanumeric ? 0 : 1];
+        if (len <= capacity) return 4 * (v + 1) + 17;
+    }
+    // Longer than this table covers -- fall back to its last (biggest)
+    // version's module count rather than guessing further.
+    return 4 * QR_ECC_M_CAPACITY.length + 17;
+}
+
 function qrCommand(element, data) {
     const x = mmToDots(element.x_mm);
     const y = mmToDots(element.y_mm);
     const value = tsplEscape(resolveElementValue(element, data));
     // ECC level M (medium, TSPL's "M"), cell width from width_mm (a QR
     // "cell" in TSPL is specified as a dot-size integer, not mm directly
-    // -- approximate via width_mm / expected module count; a flat default
-    // of 4 dots/cell reads reliably at 50mm label size and is adjusted
-    // per-template via width_mm if a template needs it denser/looser).
-    const cellSize = Math.max(1, Math.round(mmToDots(element.width_mm || 20) / 40));
+    // -- derived from width_mm / the ACTUAL module count this value's
+    // length+mode will produce, so the printed QR's real physical size
+    // actually matches width_mm instead of silently coming out smaller).
+    const moduleCount = estimateQrModuleCount(value);
+    const cellSize = Math.max(1, Math.round(mmToDots(element.width_mm || 20) / moduleCount));
     return `QRCODE ${x},${y},M,${cellSize},A,0,"${value}"`;
 }
 
@@ -242,5 +284,5 @@ function buildTsplPayloadBase64(template, data) {
 // Plain global-scope exports (this repo has no module system) plus a
 // CommonJS export so print-tspl.test.js (Node, no browser) can require it.
 if (typeof module !== "undefined" && module.exports) {
-    module.exports = { buildTsplFromTemplate, buildTsplPayloadBase64, cp1251Encode, bytesToBase64, mmToDots, tsplEscape, wrapText };
+    module.exports = { buildTsplFromTemplate, buildTsplPayloadBase64, cp1251Encode, bytesToBase64, mmToDots, tsplEscape, wrapText, estimateQrModuleCount };
 }
