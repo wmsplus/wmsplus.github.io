@@ -123,59 +123,91 @@ function barcodeCommand(element, data) {
     return `BARCODE ${x},${y},"${type}",${height},1,0,2,2,"${value}"`;
 }
 
-// QR error-correction-level M capacity (max characters) by version, for
-// the two encoding modes every QR value in this app actually uses -- a
-// short uppercase/digit/symbol code (Alphanumeric mode: box_code,
-// shelf_code, "WMSP.PLCE.WSHK...") or a longer mixed-case string (Byte
-// mode, e.g. "WMSP.INV." + a lowercase-hex session uuid). Row index i
-// is version i+1; module count for a version is 4*version+17 (the
-// standard QR side-length formula). Index by whichever mode `value`
-// actually is, pick the first version whose capacity covers its length.
-const QR_ECC_M_CAPACITY = [
-    // [alphanumeric, byte]
-    [20, 14], [38, 26], [61, 42], [90, 62], [122, 84],
-    [154, 106], [178, 122], [221, 152], [262, 180], [311, 213],
-];
-const QR_ALPHANUMERIC_RE = /^[A-Z0-9 $%*+\-./:]*$/;
+// ---------- QR rendering: bitmap, not the printer's onboard QRCODE
+// command ----------
+//
+// Real on-site testing (2026-09-24) found the printer's own TSPL QRCODE
+// command produces output that NO scanner -- not just this app's jsQR,
+// a generic phone camera QR reader too -- recognizes as a valid QR code
+// at all, regardless of cellSize/physical size. Meanwhile this exact
+// app already has a QR path PROVEN to produce genuinely scannable codes:
+// the on-screen pairing QR (display.js/mobile-login.html), rendered via
+// the qrcodejs CDN library. So printed QR codes are now built the same
+// way -- encode with qrcodejs's own QR model (not the printer's
+// firmware), rasterize the EXACT module matrix it computes, and send
+// that as a TSPL BITMAP (a raw monochrome image) instead of a QRCODE
+// command. This sidesteps the printer's QR encoder entirely; the
+// printer only ever draws pixels we already know are correct.
+//
+// This makes the QR path DOM-dependent (needs `document` + the
+// `QRCode` global from qrcodejs) unlike the rest of this file, which is
+// why it's isolated to qrModuleMatrixFor() below -- everything else
+// (the bit-packing math in packQrModulesToBitmap) stays pure/testable.
 
-// A QR's cellSize (dots per module) only controls PER-MODULE size --
-// the printer itself decides the actual module COUNT from the data
-// length/mode/ECC level, which this app's code never sees. The previous
-// version of this function assumed a flat ~40 modules regardless of
-// content and picked cellSize to fit width_mm against that guess -- but
-// every real value here (14-20 char alphanumeric codes) is versions
-// 1-2, only ~21-25 modules, so the ACTUAL printed size came out at
-// roughly HALF of width_mm. That silently made every box/shelf QR
-// sticker in this app print much smaller and denser than intended,
-// which is the leading suspect for real-world "phone camera can't
-// scan this QR reliably" reports -- estimating the true module count
-// from the value itself (rather than a fixed guess) fixes the size for
-// any FUTURE print/reprint; it can't retroactively fix stickers already
-// printed at the old (smaller) size.
-function estimateQrModuleCount(value) {
-    const isAlphanumeric = QR_ALPHANUMERIC_RE.test(value);
-    const len = value.length;
-    for (let v = 0; v < QR_ECC_M_CAPACITY.length; v++) {
-        const capacity = QR_ECC_M_CAPACITY[v][isAlphanumeric ? 0 : 1];
-        if (len <= capacity) return 4 * (v + 1) + 17;
+// Standard QR minimum quiet zone (blank margin) -- required for reliable
+// detection by any scanner; qrcodejs's module matrix does NOT include
+// this itself, only the actual symbol.
+const QR_QUIET_ZONE_MODULES = 4;
+
+// Packs an already-computed QR module matrix into a 1-bit-per-pixel
+// bitmap sized to fit widthMm, adding the quiet zone margin. Pure/no DOM
+// -- isDarkFn(row, col) is any function, so this is fully unit-testable
+// with a hand-built fake matrix, independent of qrcodejs.
+function packQrModulesToBitmap(moduleCount, isDarkFn, widthMm) {
+    const totalModules = moduleCount + QR_QUIET_ZONE_MODULES * 2;
+    const cellSizeDots = Math.max(1, Math.round(mmToDots(widthMm || 20) / totalModules));
+    const pixelSize = totalModules * cellSizeDots;
+    const widthBytes = Math.ceil(pixelSize / 8);
+    const bytes = new Array(widthBytes * pixelSize).fill(0);
+    for (let row = 0; row < moduleCount; row++) {
+        for (let col = 0; col < moduleCount; col++) {
+            if (!isDarkFn(row, col)) continue;
+            const pxRowStart = (row + QR_QUIET_ZONE_MODULES) * cellSizeDots;
+            const pxColStart = (col + QR_QUIET_ZONE_MODULES) * cellSizeDots;
+            for (let dy = 0; dy < cellSizeDots; dy++) {
+                const rowByteOffset = (pxRowStart + dy) * widthBytes;
+                for (let dx = 0; dx < cellSizeDots; dx++) {
+                    const pxCol = pxColStart + dx;
+                    bytes[rowByteOffset + (pxCol >> 3)] |= (0x80 >> (pxCol & 7));
+                }
+            }
+        }
     }
-    // Longer than this table covers -- fall back to its last (biggest)
-    // version's module count rather than guessing further.
-    return 4 * QR_ECC_M_CAPACITY.length + 17;
+    return { widthBytes, heightDots: pixelSize, bytes };
 }
 
-function qrCommand(element, data) {
+// The one DOM-dependent piece: builds the REAL module matrix for a
+// value via qrcodejs's own encoder (davidshimjs/qrcodejs -- same CDN
+// library and version already used for the pairing QR). Never appended
+// to the document -- canvas-based rendering works fine detached, and we
+// only read the encoder's internal model, never qrcodejs's own drawn
+// pixels (which would reintroduce exactly the anti-aliasing/scaling
+// ambiguity this rewrite is trying to avoid).
+function qrModuleMatrixFor(value) {
+    const container = document.createElement("div");
+    // eslint-disable-next-line no-undef -- QRCode comes from the qrcodejs CDN script
+    const qr = new QRCode(container, { text: String(value), width: 1, height: 1, correctLevel: QRCode.CorrectLevel.M });
+    const model = qr._oQRCode;
+    return { moduleCount: model.getModuleCount(), isDark: (row, col) => model.isDark(row, col) };
+}
+
+// Full TSPL BITMAP command bytes (header text + raw binary image data +
+// trailing CRLF) for one qr-type element. The header text is CP1251-
+// encoded like any other command line; the binary image bytes are NOT
+// -- cp1251Encode maps unmapped byte values (which real bitmap data is
+// full of) to '?', so it would corrupt roughly half of them. This is
+// the reason buildTsplBytes() (below) assembles the payload as a byte
+// array directly rather than building one big string and encoding it
+// as a single last step, the way buildTsplFromTemplate() still does for
+// its text-only preview.
+function qrBitmapCommandBytes(element, data) {
+    const value = tsplEscape(resolveElementValue(element, data));
+    const { moduleCount, isDark } = qrModuleMatrixFor(value);
+    const { widthBytes, heightDots, bytes } = packQrModulesToBitmap(moduleCount, isDark, element.width_mm);
     const x = mmToDots(element.x_mm);
     const y = mmToDots(element.y_mm);
-    const value = tsplEscape(resolveElementValue(element, data));
-    // ECC level M (medium, TSPL's "M"), cell width from width_mm (a QR
-    // "cell" in TSPL is specified as a dot-size integer, not mm directly
-    // -- derived from width_mm / the ACTUAL module count this value's
-    // length+mode will produce, so the printed QR's real physical size
-    // actually matches width_mm instead of silently coming out smaller).
-    const moduleCount = estimateQrModuleCount(value);
-    const cellSize = Math.max(1, Math.round(mmToDots(element.width_mm || 20) / moduleCount));
-    return `QRCODE ${x},${y},M,${cellSize},A,0,"${value}"`;
+    const header = cp1251Encode(`BITMAP ${x},${y},${widthBytes},${heightDots},0,`);
+    return header.concat(bytes, [0x0d, 0x0a]);
 }
 
 // Purely decorative plus/cross, drawn as two overlapping filled rectangles
@@ -195,32 +227,79 @@ function crossCommand(element) {
 function elementCommand(element, data) {
     if (element.type === "text") return textCommand(element, data);
     if (element.type === "barcode") return barcodeCommand(element, data);
-    if (element.type === "qr") return qrCommand(element, data);
     if (element.type === "cross") return crossCommand(element);
+    if (element.type === "qr") {
+        // qr elements no longer produce a plain TSPL text command --
+        // they're rendered as a BITMAP by buildTsplBytes()/
+        // qrBitmapCommandBytes() instead (see the comment above that
+        // function). This branch only exists so buildTsplFromTemplate()'s
+        // human-readable PREVIEW can still describe a qr element without
+        // throwing; it is never what's actually sent to a printer.
+        return `[QR bitmap for "${tsplEscape(resolveElementValue(element, data))}" -- generated at print time by buildTsplBytes(), not shown here]`;
+    }
     throw new Error("print-tspl: unknown element type '" + element.type + "'");
 }
 
+const TSPL_HEADER_LINES = (widthMm, heightMm) => [
+    `SIZE ${widthMm} mm,${heightMm} mm`,
+    `GAP 2 mm,0 mm`,
+    `CLS`,
+    // Confirmed on-site against the real DA220 (2026-09-01): without
+    // this, content prints mirrored 180° and shifted to the opposite
+    // corner from the x_mm/y_mm coordinates given.
+    `DIRECTION 1`,
+    // Cyrillic text: the printer expects Windows-1251 bytes, not
+    // UTF-8. buildTsplPayloadBase64() below does that re-encoding --
+    // confirmed needed on-site (2026-09-02): without it, Cyrillic
+    // text printed as garbled glyphs.
+    `CODEPAGE 1251`,
+];
+
+// Human-readable TEXT preview of a template -- NOT what's actually sent
+// to a printer for any template containing a qr element (see
+// elementCommand's qr branch above). Kept for tests/debugging of the
+// non-qr command shapes; buildTsplPayloadBase64() below builds the real
+// payload independently via buildTsplBytes().
 function buildTsplFromTemplate(template, data) {
     const widthMm = Number(template.width_mm) || 50;
     const heightMm = Number(template.height_mm) || 50;
     const elements = Array.isArray(template.elements) ? template.elements : [];
     const lines = [
-        `SIZE ${widthMm} mm,${heightMm} mm`,
-        `GAP 2 mm,0 mm`,
-        `CLS`,
-        // Confirmed on-site against the real DA220 (2026-09-01): without
-        // this, content prints mirrored 180° and shifted to the opposite
-        // corner from the x_mm/y_mm coordinates given.
-        `DIRECTION 1`,
-        // Cyrillic text: the printer expects Windows-1251 bytes, not
-        // UTF-8. buildTsplPayloadBase64() below does that re-encoding --
-        // confirmed needed on-site (2026-09-02): without it, Cyrillic
-        // text printed as garbled glyphs.
-        `CODEPAGE 1251`,
+        ...TSPL_HEADER_LINES(widthMm, heightMm),
         ...elements.map((element) => elementCommand(element, data || {})),
         `PRINT 1,1`,
     ];
     return lines.join("\r\n") + "\r\n";
+}
+
+// The REAL byte-exact printer payload, built as a byte array from the
+// start rather than one big string CP1251-encoded as a last step (see
+// qrBitmapCommandBytes' comment for why that would corrupt binary
+// bitmap data). Produces byte-identical output to
+// cp1251Encode(buildTsplFromTemplate(...)) for any template with no qr
+// elements; diverges only for qr elements, which this builds as a real
+// BITMAP instead of buildTsplFromTemplate's text placeholder.
+//
+// Requires a browser environment (document + the qrcodejs global) for
+// any template containing a qr element -- see qrModuleMatrixFor().
+function buildTsplBytes(template, data) {
+    const widthMm = Number(template.width_mm) || 50;
+    const heightMm = Number(template.height_mm) || 50;
+    const elements = Array.isArray(template.elements) ? template.elements : [];
+    const bytes = [];
+    function appendLine(line) {
+        bytes.push(...cp1251Encode(line + "\r\n"));
+    }
+    TSPL_HEADER_LINES(widthMm, heightMm).forEach(appendLine);
+    elements.forEach((element) => {
+        if (element.type === "qr") {
+            bytes.push(...qrBitmapCommandBytes(element, data || {}));
+        } else {
+            appendLine(elementCommand(element, data || {}));
+        }
+    });
+    appendLine(`PRINT 1,1`);
+    return bytes;
 }
 
 // CP1251 (Windows Cyrillic) byte for one Unicode code point. ASCII passes
@@ -270,19 +349,15 @@ function bytesToBase64(bytes) {
 }
 
 // The actual value stored in print_jobs.tspl and sent to the bridge:
-// CP1251-encoded bytes, base64-wrapped so the text column can hold them
-// safely. The bridge only ever base64-decodes this and writes the raw
-// bytes -- it has no charset knowledge of its own. This is also the seam
-// a future "image" element type hooks into: BITMAP's raw pixel bytes
-// would join this same byte array before base64-encoding, with zero
-// changes needed on the bridge side.
+// base64-wrapped bytes so the text column can hold them safely. The
+// bridge only ever base64-decodes this and writes the raw bytes -- it
+// has no charset knowledge of its own.
 function buildTsplPayloadBase64(template, data) {
-    const tspl = buildTsplFromTemplate(template, data);
-    return bytesToBase64(cp1251Encode(tspl));
+    return bytesToBase64(buildTsplBytes(template, data));
 }
 
 // Plain global-scope exports (this repo has no module system) plus a
 // CommonJS export so print-tspl.test.js (Node, no browser) can require it.
 if (typeof module !== "undefined" && module.exports) {
-    module.exports = { buildTsplFromTemplate, buildTsplPayloadBase64, cp1251Encode, bytesToBase64, mmToDots, tsplEscape, wrapText, estimateQrModuleCount };
+    module.exports = { buildTsplFromTemplate, buildTsplBytes, buildTsplPayloadBase64, cp1251Encode, bytesToBase64, mmToDots, tsplEscape, wrapText, packQrModulesToBitmap };
 }
