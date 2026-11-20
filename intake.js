@@ -140,6 +140,16 @@
         photoPath: null,
         stickerCode: null,
         spillFlag: false,
+        pendingScreen: 'screenHome',
+        violations: {
+            loading: false,
+            error: '',
+            people: [],
+            selected: null,
+            detailLoading: false,
+            detailError: '',
+            detailRows: [],
+        },
     };
 
     // Priority when more than one trigger applies to the same item: Шредер
@@ -314,7 +324,20 @@
         });
     }
 
-    function goToStart() {
+    function greetingName(fullName) {
+        const parts = String(fullName || '').trim().split(/\s+/).filter(Boolean);
+        return parts[1] || parts[0] || '';
+    }
+
+    function updateHomeGreeting() {
+        const el = document.getElementById('homeGreeting');
+        if (!el) return;
+        const name = greetingName(state.fullName);
+        el.textContent = name ? 'Привет, ' + name : 'Привет!';
+    }
+
+    function openProtectedScreen(screenId) {
+        state.pendingScreen = screenId || 'screenHome';
         if (!state.employeeId || !state.fullName) {
             showScreen('screenId');
         } else if (!state.area) {
@@ -322,8 +345,14 @@
         } else {
             updateAreaPills();
             updateShiftHeaders();
-            showScreen('screenEntryType');
+            updateHomeGreeting();
+            showScreen(state.pendingScreen);
+            if (state.pendingScreen === 'screenViolations') void loadWeeklyViolators(true);
         }
+    }
+
+    function goToStart() {
+        openProtectedScreen('screenEntryType');
     }
 
     // All top-level services live in the same document. Switching one of
@@ -332,14 +361,193 @@
     function openHome() {
         stopQrScan();
         stopCloseQrScan();
-        showScreen('screenHome');
+        openProtectedScreen('screenHome');
     }
 
     document.getElementById('openProblemItemBtn').addEventListener('click', goToStart);
-    document.getElementById('openViolationsBtn').addEventListener('click', () => showScreen('screenViolations'));
-    document.getElementById('openPassesBtn').addEventListener('click', () => showScreen('screenPasses'));
+    document.getElementById('openViolationsBtn').addEventListener('click', () => openProtectedScreen('screenViolations'));
+    document.getElementById('openPassesBtn').addEventListener('click', () => openProtectedScreen('screenPasses'));
     document.querySelectorAll('.js-home').forEach((button) => button.addEventListener('click', openHome));
     document.getElementById('backHomeFromEntryBtn').addEventListener('click', openHome);
+
+    function renderWeeklyViolators() {
+        const list = document.getElementById('violatorsList');
+        if (!list) return;
+
+        list.replaceChildren();
+        if (state.violations.loading) {
+            const message = document.createElement('div');
+            message.className = 'violators-empty';
+            message.textContent = 'Загружаю нарушения…';
+            list.appendChild(message);
+            return;
+        }
+        if (state.violations.error) {
+            const message = document.createElement('div');
+            message.className = 'violators-empty';
+            message.textContent = state.violations.error;
+            list.appendChild(message);
+            return;
+        }
+
+        if (!state.violations.people.length) {
+            const message = document.createElement('div');
+            message.className = 'violators-empty';
+            message.textContent = 'За последние 7 дней нет сотрудников с 3 и более нарушениями.';
+            list.appendChild(message);
+            return;
+        }
+        state.violations.people.forEach((person, index) => {
+            const row = document.createElement('button');
+            row.type = 'button';
+            row.className = 'violator-row';
+            const rank = document.createElement('span');
+            rank.className = 'violator-rank';
+            rank.textContent = String(index + 1) + '.';
+            const personWrap = document.createElement('span');
+            personWrap.className = 'violator-person';
+            const name = document.createElement('span');
+            name.className = 'violator-name';
+            name.textContent = person.fullName;
+            const id = document.createElement('span');
+            id.className = 'violator-id';
+            id.textContent = 'ID ' + person.employeeId;
+            personWrap.append(name, id);
+            const count = document.createElement('span');
+            count.className = 'violator-count';
+            count.textContent = person.count + ' нар.';
+            row.append(rank, personWrap, count);
+            row.addEventListener('click', () => { void openEmployeeViolations(person); });
+            list.appendChild(row);
+        });
+    }
+
+    async function loadWeeklyViolators(force) {
+        if (state.violations.loading || (!force && state.violations.people.length)) {
+            renderWeeklyViolators();
+            return;
+        }
+        state.violations.loading = true;
+        state.violations.error = '';
+        renderWeeklyViolators();
+        try {
+            const { data, error } = await supabaseClient.rpc('mobile_weekly_violators');
+            if (error) throw error;
+            state.violations.people = (data || [])
+                .map((person) => ({
+                    employeeId: String(person.employee_id || '').trim(),
+                    fullName: String(person.full_name || '').trim(),
+                    count: Number(person.violation_count) || 0,
+                    totalTaskPrice: Number(person.total_task_price) || 0,
+                }))
+                .filter((person) => person.employeeId)
+                .map((person) => ({ ...person, fullName: person.fullName || 'ID ' + person.employeeId }));
+        } catch (error) {
+            state.violations.error = 'Не удалось загрузить список. Попробуйте ещё раз.';
+            console.warn('weekly violators load failed:', error);
+        } finally {
+            state.violations.loading = false;
+            renderWeeklyViolators();
+        }
+    }
+
+    function formatRoubles(value) {
+        return new Intl.NumberFormat('ru-RU', {
+            style: 'currency', currency: 'RUB', maximumFractionDigits: 2,
+        }).format(Number(value) || 0);
+    }
+
+    function formatViolationDate(value) {
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return '—';
+        return new Intl.DateTimeFormat('ru-RU', {
+            day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+        }).format(date);
+    }
+
+    function renderEmployeeViolations() {
+        const person = state.violations.selected;
+        const name = document.getElementById('employeeViolationsName');
+        const id = document.getElementById('employeeViolationsId');
+        const total = document.getElementById('employeeViolationsTotal');
+        const body = document.getElementById('employeeViolationsBody');
+        if (!person || !name || !id || !total || !body) return;
+
+        name.textContent = person.fullName;
+        id.textContent = 'ID ' + person.employeeId;
+        body.replaceChildren();
+        if (state.violations.detailLoading) {
+            total.textContent = 'Загружаю нарушения…';
+            return;
+        }
+        if (state.violations.detailError) {
+            total.textContent = state.violations.detailError;
+            return;
+        }
+        const sum = state.violations.detailRows.reduce((amount, row) => amount + (Number(row.task_price) || 0), 0);
+        total.textContent = 'Суммарная стоимость нарушений: ' + formatRoubles(sum || person.totalTaskPrice);
+        if (!state.violations.detailRows.length) {
+            const row = document.createElement('tr');
+            const cell = document.createElement('td');
+            cell.colSpan = 3;
+            cell.textContent = 'За выбранный период нарушений нет.';
+            row.appendChild(cell);
+            body.appendChild(row);
+            return;
+        }
+        state.violations.detailRows.forEach((item) => {
+            const row = document.createElement('tr');
+            [
+                formatViolationDate(item.created_at),
+                item.violation_type || '—',
+                item.shk || '—',
+            ].forEach((value) => {
+                const cell = document.createElement('td');
+                cell.textContent = value;
+                row.appendChild(cell);
+            });
+            body.appendChild(row);
+        });
+    }
+
+    async function openEmployeeViolations(person) {
+        state.violations.selected = person;
+        state.violations.detailRows = [];
+        state.violations.detailError = '';
+        state.violations.detailLoading = true;
+        showScreen('screenEmployeeViolations');
+        renderEmployeeViolations();
+        const from = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+        try {
+            let query = supabaseClient
+                .from('wms_violations')
+                .select('created_at,violation_type,shk,task_price')
+                .gte('created_at', from)
+                .order('created_at', { ascending: false })
+                .limit(1000);
+            // The current form saves the culprit into culprit_employee_id.
+            // The fallback keeps historic rows, where a numeric ID was put in
+            // culprit_name, in the same employee card.
+            query = /^\d+$/.test(person.employeeId)
+                ? query.or('culprit_employee_id.eq.' + person.employeeId + ',culprit_name.eq.' + person.employeeId)
+                : query.eq('culprit_employee_id', person.employeeId);
+            const { data, error } = await query;
+            if (error) throw error;
+            state.violations.detailRows = data || [];
+        } catch (error) {
+            state.violations.detailError = 'Не удалось загрузить карточку сотрудника.';
+            console.warn('employee violations load failed:', error);
+        } finally {
+            state.violations.detailLoading = false;
+            renderEmployeeViolations();
+        }
+    }
+
+    document.getElementById('backToViolatorsBtn').addEventListener('click', () => {
+        state.violations.selected = null;
+        showScreen('screenViolations');
+        renderWeeklyViolators();
+    });
 
     // ---------- Screen: ID ----------
     const idInput = document.getElementById('idInput');
@@ -374,13 +582,7 @@
         localStorage.setItem(LS_FULL_NAME, val);
         nameMsg.textContent = '';
         nameMsg.className = 'msg';
-        if (state.area) {
-            updateAreaPills();
-            updateShiftHeaders();
-            showScreen('screenEntryType');
-        } else {
-            showScreen('screenArea');
-        }
+        openProtectedScreen(state.pendingScreen);
     }
     document.getElementById('nameNextBtn').addEventListener('click', submitName);
     nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitName(); });
@@ -394,9 +596,7 @@
         btn.addEventListener('click', () => {
             state.area = btn.dataset.area;
             localStorage.setItem(LS_AREA, state.area);
-            updateAreaPills();
-            updateShiftHeaders();
-            showScreen('screenEntryType');
+            openProtectedScreen(state.pendingScreen);
         });
     });
     document.getElementById('changeUserBtn').addEventListener('click', () => {
@@ -406,6 +606,7 @@
         state.employeeId = null;
         state.fullName = null;
         state.area = null;
+        state.pendingScreen = 'screenHome';
         idInput.value = '';
         nameInput.value = '';
         showScreen('screenId');
@@ -1438,9 +1639,9 @@
     setInterval(updateShiftHeaders, 60000);
 
     if (window.location.hash === '#violations') {
-        showScreen('screenViolations');
+        openProtectedScreen('screenViolations');
     } else if (window.location.hash === '#passes') {
-        showScreen('screenPasses');
+        openProtectedScreen('screenPasses');
     } else {
         openHome();
     }

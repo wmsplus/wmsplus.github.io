@@ -354,6 +354,44 @@
     .home-menu-note { display: block; margin-top: 3px; font-size: 12px; color: rgba(36,32,56,.62); }
     .placeholder-card { text-align: center; }
     .placeholder-icon { font-size: 42px; line-height: 1; margin-bottom: 14px; }
+    .violators-card { text-align: left; }
+    .violators-title-row { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 4px; }
+    .violators-title-row .placeholder-icon { margin: 0; font-size: 31px; }
+    .violators-title-row h1 { margin: 0; text-align: left; }
+    .violators-caption { margin: 0 0 14px; color: rgba(36,32,56,.62); font-size: 13px; line-height: 1.35; }
+    .violators-list { display: grid; gap: 8px; }
+    .violator-row {
+        width: 100%;
+        min-height: 51px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        border: 1px solid rgba(36,32,56,.1);
+        border-radius: 12px;
+        background: #f9f8fe;
+        color: var(--muted);
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+    }
+    .violator-row:active { background: #eee9ff; transform: scale(.99); }
+    .violator-rank { flex: 0 0 24px; color: var(--accent); font-size: 13px; font-weight: 800; }
+    .violator-person { min-width: 0; flex: 1; }
+    .violator-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 750; }
+    .violator-id { display: block; margin-top: 2px; color: rgba(36,32,56,.58); font-size: 11px; font-weight: 650; }
+    .violator-count { flex: 0 0 auto; color: var(--danger); font-size: 13px; font-weight: 850; }
+    .violators-scroll { max-height: min(46dvh, 350px); overflow-y: auto; overscroll-behavior: contain; padding-right: 2px; }
+    .violators-empty { padding: 22px 12px; text-align: center; color: rgba(36,32,56,.62); font-size: 14px; }
+    .violators-footer { display: flex; align-items: center; gap: 8px; margin-top: 14px; }
+    .violators-footer .secondary-btn { width: auto; min-width: 44px; margin: 0; padding: 9px 12px; }
+    .violators-page { flex: 1; text-align: center; color: rgba(36,32,56,.62); font-size: 12px; font-weight: 700; }
+    .employee-violations-total { margin: 0 0 14px; padding: 12px 14px; border-radius: 12px; background: #eee9ff; color: var(--accent); font-size: 14px; font-weight: 850; text-align: center; }
+    .employee-violations-table-wrap { max-height: min(46dvh, 350px); overflow: auto; overscroll-behavior: contain; border: 1px solid rgba(36,32,56,.1); border-radius: 12px; }
+    .employee-violations-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .employee-violations-table th { position: sticky; top: 0; background: #f5f2ff; color: rgba(36,32,56,.65); font-size: 10px; letter-spacing: .03em; text-align: left; text-transform: uppercase; }
+    .employee-violations-table th, .employee-violations-table td { padding: 10px 8px; border-bottom: 1px solid rgba(36,32,56,.08); vertical-align: top; }
+    .employee-violations-table tr:last-child td { border-bottom: 0; }
 
     @media (max-height: 700px) {
         .screen { padding-top: calc(78px + env(safe-area-inset-top)); padding-bottom: 16px; }
@@ -389,8 +427,8 @@
         <div class="home-brand">
             <div class="home-brand-mark">W+</div>
             <div>
-                <h1>WMS+</h1>
-                <p>Рабочие сервисы смены</p>
+                <h1 id="homeGreeting">Привет!</h1>
+                <p>СЦ Нижний Новгород Ларина</p>
             </div>
         </div>
         <div class="home-menu">
@@ -411,11 +449,25 @@
 </section>
 
 <section id="screenViolations" class="screen">
-    <div class="screen-card placeholder-card">
-        <div class="placeholder-icon">⚠️</div>
-        <h1>Нарушения</h1>
-        <p style="margin:0 0 20px;font-size:14px;line-height:1.45;">Раздел готовится. Здесь будет быстрая фиксация нарушения без перехода на другую страницу.</p>
-        <button class="primary-btn js-home" type="button">В меню</button>
+    <div class="screen-card violators-card">
+        <div class="violators-title-row"><div class="placeholder-icon">⚠️</div><h1>Нарушения</h1></div>
+        <p class="violators-caption">Нарушители за последние 7 дней: от 3 фиксаций</p>
+        <div class="violators-scroll"><div id="violatorsList" class="violators-list" aria-live="polite"></div></div>
+        <button class="back-btn js-home" type="button" aria-label="В меню">⌂</button>
+    </div>
+</section>
+
+<section id="screenEmployeeViolations" class="screen">
+    <button id="backToViolatorsBtn" class="back-btn" type="button" aria-label="К списку нарушителей">←</button>
+    <div class="screen-card violators-card">
+        <div class="violators-title-row"><div class="placeholder-icon">⚠️</div><div><h1 id="employeeViolationsName">Сотрудник</h1><p id="employeeViolationsId" class="violators-caption" style="margin:3px 0 0;"></p></div></div>
+        <div id="employeeViolationsTotal" class="employee-violations-total">Загружаю…</div>
+        <div class="employee-violations-table-wrap">
+            <table class="employee-violations-table">
+                <thead><tr><th>Дата фиксации</th><th>Нарушение</th><th>ШК</th></tr></thead>
+                <tbody id="employeeViolationsBody"></tbody>
+            </table>
+        </div>
     </div>
 </section>
 
