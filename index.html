@@ -26,9 +26,13 @@
         font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
     }
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--muted); overscroll-behavior: none; }
-    @media (max-width: 768px) {
-        html, body { overflow: hidden; }
+    html, body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: var(--bg);
+        color: var(--muted);
+        overscroll-behavior: none;
     }
     .screen {
         display: flex;
@@ -44,7 +48,7 @@
         padding: calc(85px + env(safe-area-inset-top)) 20px 24px 20px;
         position: fixed;
         inset: 0;
-        overflow-y: auto;
+        overflow: hidden;
         opacity: 0;
         pointer-events: none;
         /* visibility (not just opacity) keeps inactive screens out of the
@@ -77,6 +81,8 @@
         padding: 28px;
         width: 100%;
         max-width: 420px;
+        max-height: 100%;
+        overflow: hidden;
     }
     h1 { font-size: 20px; margin: 0 0 20px; text-align: center; }
     .field {
@@ -232,7 +238,9 @@
 
     .category-grid {
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
+        /* Four columns keep even the 12-category screen inside a single
+           app-sized viewport instead of turning it into a web page. */
+        grid-template-columns: repeat(4, 1fr);
         gap: 10px;
         width: 100%;
         max-width: 420px;
@@ -283,6 +291,78 @@
 
     .honeypot { position: absolute; left: -9999px; top: -9999px; opacity: 0; height: 0; }
 
+    .home-screen {
+        background:
+            radial-gradient(circle at 82% 9%, rgba(255,255,255,.72), transparent 30%),
+            linear-gradient(145deg, #ded4ff 0%, #f5f1ff 100%);
+    }
+    .home-card {
+        width: 100%;
+        max-width: 420px;
+        text-align: left;
+    }
+    .home-brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 28px;
+    }
+    .home-brand-mark {
+        width: 48px;
+        height: 48px;
+        display: grid;
+        place-items: center;
+        border-radius: 15px;
+        background: var(--accent);
+        color: #fff;
+        font-size: 21px;
+        font-weight: 900;
+        box-shadow: 0 12px 24px rgba(98,60,234,.24);
+    }
+    .home-brand h1 { margin: 0; text-align: left; }
+    .home-brand p { margin: 3px 0 0; font-size: 13px; color: rgba(36,32,56,.65); }
+    .home-menu { display: grid; gap: 12px; }
+    .home-menu-btn {
+        width: 100%;
+        min-height: 82px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 14px;
+        border: 1px solid rgba(36,32,56,.1);
+        border-radius: var(--radius-lg);
+        background: rgba(255,255,255,.92);
+        color: var(--muted);
+        box-shadow: 0 8px 22px rgba(66,46,123,.08);
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+    }
+    .home-menu-btn:active { transform: scale(.985); background: #fff; }
+    .home-menu-icon {
+        flex: 0 0 46px;
+        width: 46px;
+        height: 46px;
+        display: grid;
+        place-items: center;
+        border-radius: 14px;
+        background: #eee9ff;
+        font-size: 23px;
+    }
+    .home-menu-copy { min-width: 0; }
+    .home-menu-title { display: block; font-size: 16px; font-weight: 800; }
+    .home-menu-note { display: block; margin-top: 3px; font-size: 12px; color: rgba(36,32,56,.62); }
+    .placeholder-card { text-align: center; }
+    .placeholder-icon { font-size: 42px; line-height: 1; margin-bottom: 14px; }
+
+    @media (max-height: 700px) {
+        .screen { padding-top: calc(78px + env(safe-area-inset-top)); padding-bottom: 16px; }
+        .screen-card { padding: 20px; }
+        .home-brand { margin-bottom: 18px; }
+        .home-menu { gap: 9px; }
+        .home-menu-btn { min-height: 68px; }
+    }
+
     @media (prefers-reduced-motion: reduce) {
         /* Kills every transition declared above: the opacity/visibility fade on
            .screen and the content slide. The content-slide selectors must be
@@ -303,6 +383,50 @@
 <body>
 
 <input type="text" name="c_addr_2" id="c_addr_2" class="honeypot" autocomplete="off" tabindex="-1" aria-hidden="true">
+
+<section id="screenHome" class="screen home-screen">
+    <div class="home-card">
+        <div class="home-brand">
+            <div class="home-brand-mark">W+</div>
+            <div>
+                <h1>WMS+</h1>
+                <p>Рабочие сервисы смены</p>
+            </div>
+        </div>
+        <div class="home-menu">
+            <button id="openProblemItemBtn" class="home-menu-btn" type="button">
+                <span class="home-menu-icon">📦</span>
+                <span class="home-menu-copy"><span class="home-menu-title">Проблемный товар</span><span class="home-menu-note">Без ШК, 2 ШК и пустая упаковка</span></span>
+            </button>
+            <button id="openViolationsBtn" class="home-menu-btn" type="button">
+                <span class="home-menu-icon">⚠️</span>
+                <span class="home-menu-copy"><span class="home-menu-title">Нарушения</span><span class="home-menu-note">Фиксация ошибок процесса</span></span>
+            </button>
+            <button id="openPassesBtn" class="home-menu-btn" type="button">
+                <span class="home-menu-icon">🪪</span>
+                <span class="home-menu-copy"><span class="home-menu-title">Печать пропусков</span><span class="home-menu-note">Подготовка пропуска сотрудника</span></span>
+            </button>
+        </div>
+    </div>
+</section>
+
+<section id="screenViolations" class="screen">
+    <div class="screen-card placeholder-card">
+        <div class="placeholder-icon">⚠️</div>
+        <h1>Нарушения</h1>
+        <p style="margin:0 0 20px;font-size:14px;line-height:1.45;">Раздел готовится. Здесь будет быстрая фиксация нарушения без перехода на другую страницу.</p>
+        <button class="primary-btn js-home" type="button">В меню</button>
+    </div>
+</section>
+
+<section id="screenPasses" class="screen">
+    <div class="screen-card placeholder-card">
+        <div class="placeholder-icon">🪪</div>
+        <h1>Печать пропусков</h1>
+        <p style="margin:0 0 20px;font-size:14px;line-height:1.45;">Раздел готовится. Печать будет открываться здесь же, без новой вкладки.</p>
+        <button class="primary-btn js-home" type="button">В меню</button>
+    </div>
+</section>
 
 <section id="screenId" class="screen">
     <div class="screen-card">
@@ -335,6 +459,7 @@
 <section id="screenEntryType" class="screen">
     <div id="areaPillEntry" class="area-pill"><span id="areaPillEntryText"></span> ✎</div>
     <div id="shiftHeaderEntry" class="shift-header"></div>
+    <button id="backHomeFromEntryBtn" class="back-btn" type="button" aria-label="В меню">⌂</button>
     <div class="screen-card" style="text-align:center;">
         <h1>Выберите тип заявки</h1>
         <button class="area-btn" data-entry="no-shk" type="button">Товар без ШК</button>

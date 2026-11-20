@@ -326,6 +326,21 @@
         }
     }
 
+    // All top-level services live in the same document. Switching one of
+    // them only swaps the active app screen, so there is no browser reload,
+    // visible URL jump, or separate HTML page to maintain.
+    function openHome() {
+        stopQrScan();
+        stopCloseQrScan();
+        showScreen('screenHome');
+    }
+
+    document.getElementById('openProblemItemBtn').addEventListener('click', goToStart);
+    document.getElementById('openViolationsBtn').addEventListener('click', () => showScreen('screenViolations'));
+    document.getElementById('openPassesBtn').addEventListener('click', () => showScreen('screenPasses'));
+    document.querySelectorAll('.js-home').forEach((button) => button.addEventListener('click', openHome));
+    document.getElementById('backHomeFromEntryBtn').addEventListener('click', openHome);
+
     // ---------- Screen: ID ----------
     const idInput = document.getElementById('idInput');
     const idMsg = document.getElementById('idMsg');
@@ -1422,5 +1437,5 @@
 
     setInterval(updateShiftHeaders, 60000);
 
-    goToStart();
+    openHome();
 })();
