@@ -142,9 +142,7 @@
     .area-pill {
         position: fixed;
         top: calc(14px + env(safe-area-inset-top));
-        /* All navigation controls live in one predictable top-right row.
-           On workflow screens the area control sits just before Back/Home. */
-        right: calc(62px + env(safe-area-inset-right));
+        left: calc(14px + env(safe-area-inset-left));
         display: flex;
         align-items: center;
         gap: 6px;
@@ -158,7 +156,6 @@
         cursor: pointer;
         z-index: 10;
     }
-    .home-area-pill { right: calc(14px + env(safe-area-inset-right)); }
 
     .shift-header {
         position: fixed;
@@ -365,7 +362,7 @@
     .period-switch { display: inline-flex; margin: 0 0 14px; padding: 3px; border-radius: 999px; background: #eee9ff; }
     .period-switch button { border: 0; border-radius: 999px; padding: 7px 13px; background: transparent; color: rgba(36,32,56,.62); font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; }
     .period-switch button.is-active { background: #fff; color: var(--accent); box-shadow: 0 2px 8px rgba(36,32,56,.12); }
-    .violators-list { display: grid; gap: 8px; }
+    .violators-list { display: grid; width: 100%; min-width: 0; gap: 8px; }
     .violator-row {
         width: 100%;
         min-height: 51px;
@@ -380,6 +377,8 @@
         font: inherit;
         text-align: left;
         cursor: pointer;
+        min-width: 0;
+        max-width: 100%;
     }
     .violator-row:active { background: #eee9ff; transform: scale(.99); }
     .violator-rank { flex: 0 0 24px; color: var(--accent); font-size: 13px; font-weight: 800; }
@@ -387,16 +386,19 @@
     .violator-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 750; }
     .violator-id { display: block; margin-top: 2px; color: rgba(36,32,56,.58); font-size: 11px; font-weight: 650; }
     .violator-count { flex: 0 0 auto; color: var(--danger); font-size: 13px; font-weight: 850; }
-    .violators-scroll { max-height: min(46dvh, 350px); overflow-y: auto; overscroll-behavior: contain; padding-right: 2px; }
+    .violators-scroll { width: 100%; max-height: min(46dvh, 350px); overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; padding-right: 2px; }
     .violators-empty { padding: 22px 12px; text-align: center; color: rgba(36,32,56,.62); font-size: 14px; }
     .violators-footer { display: flex; align-items: center; gap: 8px; margin-top: 14px; }
     .violators-footer .secondary-btn { width: auto; min-width: 44px; margin: 0; padding: 9px 12px; }
     .violators-page { flex: 1; text-align: center; color: rgba(36,32,56,.62); font-size: 12px; font-weight: 700; }
     .employee-violations-total { margin: 0 0 14px; padding: 12px 14px; border-radius: 12px; background: #eee9ff; color: var(--accent); font-size: 14px; font-weight: 850; text-align: center; }
-    .employee-violations-table-wrap { max-height: min(46dvh, 350px); overflow: auto; overscroll-behavior: contain; border: 1px solid rgba(36,32,56,.1); border-radius: 12px; }
-    .employee-violations-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .employee-violations-table-wrap { width: 100%; max-height: min(46dvh, 350px); overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; border: 1px solid rgba(36,32,56,.1); border-radius: 12px; }
+    .employee-violations-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 12px; }
+    .employee-violations-table th:nth-child(1), .employee-violations-table td:nth-child(1) { width: 28%; }
+    .employee-violations-table th:nth-child(2), .employee-violations-table td:nth-child(2) { width: 44%; }
+    .employee-violations-table th:nth-child(3), .employee-violations-table td:nth-child(3) { width: 28%; }
     .employee-violations-table th { position: sticky; top: 0; background: #f5f2ff; color: rgba(36,32,56,.65); font-size: 10px; letter-spacing: .03em; text-align: left; text-transform: uppercase; }
-    .employee-violations-table th, .employee-violations-table td { padding: 10px 8px; border-bottom: 1px solid rgba(36,32,56,.08); vertical-align: top; }
+    .employee-violations-table th, .employee-violations-table td { padding: 10px 8px; overflow-wrap: anywhere; word-break: break-word; border-bottom: 1px solid rgba(36,32,56,.08); vertical-align: top; }
     .employee-violations-table tr:last-child td { border-bottom: 0; }
 
     @media (max-height: 700px) {
@@ -457,6 +459,7 @@
 </section>
 
 <section id="screenViolations" class="screen">
+    <button class="back-btn js-home" type="button" aria-label="В меню">⌂</button>
     <div class="screen-card violators-card">
         <div class="violators-title-row"><div class="placeholder-icon">⚠️</div><h1>Нарушения</h1></div>
         <div class="period-switch" role="group" aria-label="Период нарушений">
@@ -464,7 +467,6 @@
             <button type="button" data-violations-period="30">Месяц</button>
         </div>
         <div class="violators-scroll"><div id="violatorsList" class="violators-list" aria-live="polite"></div></div>
-        <button class="back-btn js-home" type="button" aria-label="В меню">⌂</button>
     </div>
 </section>
 
