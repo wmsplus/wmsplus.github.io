@@ -1,6 +1,6 @@
 {
-  "name": "Приём товара — WMS+",
-  "short_name": "Приём товара",
+  "name": "WMS+ — Рабочие сервисы",
+  "short_name": "WMS+",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#DED4FF",

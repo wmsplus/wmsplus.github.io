@@ -1437,5 +1437,11 @@
 
     setInterval(updateShiftHeaders, 60000);
 
-    openHome();
+    if (window.location.hash === '#violations') {
+        showScreen('screenViolations');
+    } else if (window.location.hash === '#passes') {
+        showScreen('screenPasses');
+    } else {
+        openHome();
+    }
 })();
