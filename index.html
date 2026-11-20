@@ -142,7 +142,9 @@
     .area-pill {
         position: fixed;
         top: calc(14px + env(safe-area-inset-top));
-        left: calc(14px + env(safe-area-inset-left));
+        /* All navigation controls live in one predictable top-right row.
+           On workflow screens the area control sits just before Back/Home. */
+        right: calc(62px + env(safe-area-inset-right));
         display: flex;
         align-items: center;
         gap: 6px;
@@ -156,6 +158,7 @@
         cursor: pointer;
         z-index: 10;
     }
+    .home-area-pill { right: calc(14px + env(safe-area-inset-right)); }
 
     .shift-header {
         position: fixed;
@@ -359,6 +362,9 @@
     .violators-title-row .placeholder-icon { margin: 0; font-size: 31px; }
     .violators-title-row h1 { margin: 0; text-align: left; }
     .violators-caption { margin: 0 0 14px; color: rgba(36,32,56,.62); font-size: 13px; line-height: 1.35; }
+    .period-switch { display: inline-flex; margin: 0 0 14px; padding: 3px; border-radius: 999px; background: #eee9ff; }
+    .period-switch button { border: 0; border-radius: 999px; padding: 7px 13px; background: transparent; color: rgba(36,32,56,.62); font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; }
+    .period-switch button.is-active { background: #fff; color: var(--accent); box-shadow: 0 2px 8px rgba(36,32,56,.12); }
     .violators-list { display: grid; gap: 8px; }
     .violator-row {
         width: 100%;
@@ -423,6 +429,8 @@
 <input type="text" name="c_addr_2" id="c_addr_2" class="honeypot" autocomplete="off" tabindex="-1" aria-hidden="true">
 
 <section id="screenHome" class="screen home-screen">
+    <button id="areaPillHome" class="area-pill home-area-pill" type="button" aria-label="Сменить участок"><span id="areaPillHomeText"></span> ✎</button>
+    <div id="shiftHeaderHome" class="shift-header"></div>
     <div class="home-card">
         <div class="home-brand">
             <div class="home-brand-mark">W+</div>
@@ -451,7 +459,10 @@
 <section id="screenViolations" class="screen">
     <div class="screen-card violators-card">
         <div class="violators-title-row"><div class="placeholder-icon">⚠️</div><h1>Нарушения</h1></div>
-        <p class="violators-caption">Нарушители за последние 7 дней: от 3 фиксаций</p>
+        <div class="period-switch" role="group" aria-label="Период нарушений">
+            <button class="is-active" type="button" data-violations-period="7">Неделя</button>
+            <button type="button" data-violations-period="30">Месяц</button>
+        </div>
         <div class="violators-scroll"><div id="violatorsList" class="violators-list" aria-live="polite"></div></div>
         <button class="back-btn js-home" type="button" aria-label="В меню">⌂</button>
     </div>
@@ -472,11 +483,11 @@
 </section>
 
 <section id="screenPasses" class="screen">
+    <button class="back-btn js-home" type="button" aria-label="В меню">⌂</button>
     <div class="screen-card placeholder-card">
         <div class="placeholder-icon">🪪</div>
         <h1>Печать пропусков</h1>
         <p style="margin:0 0 20px;font-size:14px;line-height:1.45;">Раздел готовится. Печать будет открываться здесь же, без новой вкладки.</p>
-        <button class="primary-btn js-home" type="button">В меню</button>
     </div>
 </section>
 

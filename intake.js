@@ -144,6 +144,7 @@
         violations: {
             loading: false,
             error: '',
+            periodDays: 7,
             people: [],
             selected: null,
             detailLoading: false,
@@ -175,7 +176,7 @@
             'areaPillEntryText', 'areaPillTypeText', 'areaPillCategoryText', 'areaPillNameText',
             'areaPillPhotoText', 'areaPillStickerText', 'areaPill2ShkText', 'areaPillEmptyText',
             'areaPillStickerSavedText', 'areaPillInstrText', 'areaPillHubText', 'areaPillCloseListText',
-            'areaPillCloseText', 'areaPillCloseQrText',
+            'areaPillCloseText', 'areaPillCloseQrText', 'areaPillHomeText',
         ].forEach((id) => {
             document.getElementById(id).textContent = state.area || '';
         });
@@ -317,7 +318,7 @@
             'shiftHeaderName', 'shiftHeaderPhoto', 'shiftHeaderSticker',
             'shiftHeader2Shk', 'shiftHeaderEmpty',
             'shiftHeaderStickerSaved', 'shiftHeaderInstr', 'shiftHeaderHub', 'shiftHeaderCloseList',
-            'shiftHeaderClose', 'shiftHeaderCloseQr',
+            'shiftHeaderClose', 'shiftHeaderCloseQr', 'shiftHeaderHome',
         ].forEach((id) => {
             const el = document.getElementById(id);
             if (el) el.textContent = label;
@@ -431,7 +432,9 @@
         state.violations.error = '';
         renderWeeklyViolators();
         try {
-            const { data, error } = await supabaseClient.rpc('mobile_weekly_violators');
+            const { data, error } = await supabaseClient.rpc('mobile_violators', {
+                p_period_days: state.violations.periodDays,
+            });
             if (error) throw error;
             state.violations.people = (data || [])
                 .map((person) => ({
@@ -450,6 +453,18 @@
             renderWeeklyViolators();
         }
     }
+
+    document.querySelectorAll('[data-violations-period]').forEach((button) => {
+        button.addEventListener('click', () => {
+            const periodDays = Number(button.dataset.violationsPeriod);
+            if (periodDays === state.violations.periodDays) return;
+            state.violations.periodDays = periodDays;
+            document.querySelectorAll('[data-violations-period]').forEach((item) => {
+                item.classList.toggle('is-active', Number(item.dataset.violationsPeriod) === periodDays);
+            });
+            void loadWeeklyViolators(true);
+        });
+    });
 
     function formatRoubles(value) {
         return new Intl.NumberFormat('ru-RU', {
@@ -517,7 +532,7 @@
         state.violations.detailLoading = true;
         showScreen('screenEmployeeViolations');
         renderEmployeeViolations();
-        const from = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+        const from = new Date(Date.now() - state.violations.periodDays * 24 * 60 * 60 * 1000).toISOString();
         try {
             let query = supabaseClient
                 .from('wms_violations')
@@ -614,7 +629,7 @@
 
     // ---------- Area pill (pencil) on wizard screens ----------
     [
-        'areaPillEntry', 'areaPillType', 'areaPillCategory', 'areaPillName',
+        'areaPillHome', 'areaPillEntry', 'areaPillType', 'areaPillCategory', 'areaPillName',
         'areaPillPhoto', 'areaPillSticker', 'areaPill2Shk', 'areaPillEmpty',
         'areaPillStickerSaved', 'areaPillInstr', 'areaPillHub', 'areaPillCloseList',
         'areaPillClose', 'areaPillCloseQr',
