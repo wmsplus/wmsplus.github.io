@@ -48,12 +48,13 @@
     function showScreen(id) {
         screens.forEach((s) => s.classList.toggle('is-active', s.id === id));
         updateBottomNavigation(id);
+        updateNotificationBell(id);
         void refreshShiftCounter();
     }
 
     function mobileTabForScreen(screenId) {
         if (screenId === 'screenViolations' || screenId === 'screenEmployeeViolations') return 'violations';
-        if (screenId === 'screenProfile' || screenId === 'screenNotifications' || screenId === 'screenPassword') return 'profile';
+        if (screenId === 'screenProfile' || screenId === 'screenNotifications' || screenId === 'screenNotificationInbox' || screenId === 'screenPassword') return 'profile';
         if (screenId === 'screenArea' && state.pendingScreen === 'screenProfile') return 'profile';
         return 'home';
     }
@@ -75,6 +76,13 @@
             if (active) button.setAttribute('aria-current', 'page');
             else button.removeAttribute('aria-current');
         });
+    }
+
+    function updateNotificationBell(screenId) {
+        const bell = document.getElementById('notificationBellBtn');
+        if (!bell) return;
+        const dashboardScreens = new Set(['screenHome', 'screenViolations', 'screenProfile']);
+        bell.hidden = !state.user || state.noShkFixationLocked || !dashboardScreens.has(screenId);
     }
 
     // Упаковка has no shift-box concept (every item there is bucketed,
@@ -174,6 +182,7 @@
         spillFlag: false,
         noShkFixationLocked: false,
         pendingScreen: 'screenHome',
+        notificationReturnScreen: 'screenHome',
         violations: {
             loading: false,
             error: '',
@@ -707,6 +716,16 @@
     document.getElementById('openProblemItemBtn').addEventListener('click', goToStart);
     document.getElementById('openPassesBtn').addEventListener('click', () => openProtectedScreen('screenPasses'));
     document.getElementById('pushSetupBtn').addEventListener('click', () => { void enableOrTestPush(); });
+    document.getElementById('notificationBellBtn').addEventListener('click', () => {
+        const activeScreen = screens.find((screen) => screen.classList.contains('is-active'))?.id;
+        state.notificationReturnScreen = ['screenHome', 'screenViolations', 'screenProfile'].includes(activeScreen)
+            ? activeScreen
+            : 'screenHome';
+        openProtectedScreen('screenNotificationInbox');
+    });
+    document.getElementById('backFromNotificationInboxBtn').addEventListener('click', () => {
+        openProtectedScreen(state.notificationReturnScreen || 'screenHome');
+    });
     document.querySelectorAll('[data-mobile-tab]').forEach((button) => {
         button.addEventListener('click', () => {
             const tab = button.dataset.mobileTab;

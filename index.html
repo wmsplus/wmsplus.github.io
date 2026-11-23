@@ -218,6 +218,25 @@
         cursor: pointer;
         z-index: 10;
     }
+    .notification-bell {
+        position: fixed;
+        top: calc(14px + env(safe-area-inset-top));
+        right: calc(14px + env(safe-area-inset-right));
+        width: 42px;
+        height: 42px;
+        display: grid;
+        place-items: center;
+        border: 1px solid rgba(36,32,56,.12);
+        border-radius: 50%;
+        background: rgba(255,255,255,.92);
+        box-shadow: 0 8px 20px rgba(66,46,123,.1);
+        color: var(--muted);
+        font-size: 19px;
+        cursor: pointer;
+        z-index: 20;
+    }
+    .notification-bell:active { transform: scale(.94); background: #fff; }
+    .notification-bell[hidden] { display: none; }
 
     .shift-counter {
         position: fixed;
@@ -476,6 +495,23 @@
     .notifications-card { text-align: left; }
     .notifications-card h1 { text-align: left; }
     .notifications-card > p { margin: 4px 0 20px; color: rgba(36,32,56,.62); font-size: 14px; line-height: 1.4; }
+    #screenNotificationInbox {
+        justify-content: flex-start;
+        padding-top: calc(68px + env(safe-area-inset-top));
+        padding-bottom: calc(82px + env(safe-area-inset-bottom));
+    }
+    #screenNotificationInbox .inbox-card {
+        height: 100%;
+        max-height: none;
+        display: flex;
+        flex-direction: column;
+    }
+    .inbox-title-row { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+    .inbox-title-row .placeholder-icon { margin: 0; font-size: 29px; }
+    .inbox-title-row h1 { margin: 0; text-align: left; }
+    .inbox-list { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; }
+    .inbox-empty { height: 100%; min-height: 160px; display: grid; place-items: center; align-content: center; gap: 9px; color: rgba(36,32,56,.58); font-size: 14px; font-weight: 650; text-align: center; }
+    .inbox-empty span { font-size: 35px; }
 
     .mobile-tabbar {
         position: fixed;
@@ -540,11 +576,14 @@
     .placeholder-card { text-align: center; }
     .placeholder-icon { font-size: 42px; line-height: 1; margin-bottom: 14px; }
     #screenViolations .violators-card {
-        height: min(620px, 100%);
+        /* The list owns every pixel between the top edge and the tab bar. */
+        height: 100%;
+        max-height: none;
         display: flex;
         flex-direction: column;
         text-align: left;
     }
+    #screenViolations { padding-bottom: calc(82px + env(safe-area-inset-bottom)); }
     .violators-card { text-align: left; }
     .violators-title-row { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 4px; }
     .violators-title-row .placeholder-icon { margin: 0; font-size: 31px; }
@@ -671,6 +710,8 @@
 
 <input type="text" name="c_addr_2" id="c_addr_2" class="honeypot" autocomplete="off" tabindex="-1" aria-hidden="true">
 
+<button id="notificationBellBtn" class="notification-bell" type="button" aria-label="Открыть уведомления" hidden>🔔</button>
+
 <nav id="mobileTabbar" class="mobile-tabbar" aria-label="Основная навигация" hidden>
     <span id="mobileTabThumb" class="mobile-tab-thumb" aria-hidden="true"></span>
     <button class="mobile-tab is-active" type="button" data-mobile-tab="home" aria-current="page">
@@ -750,6 +791,16 @@
             <span class="home-menu-copy"><span id="pushSetupTitle" class="home-menu-title">Включить уведомления</span><span id="pushSetupNote" class="home-menu-note">Получайте тестовые уведомления WMS+</span></span>
         </button>
         <div id="pushStatus" class="home-push-status" role="status" aria-live="polite"></div>
+    </div>
+</section>
+
+<section id="screenNotificationInbox" class="screen">
+    <button id="backFromNotificationInboxBtn" class="back-btn" type="button" aria-label="На главную">←</button>
+    <div class="screen-card inbox-card">
+        <div class="inbox-title-row"><div class="placeholder-icon" aria-hidden="true">🔔</div><h1>Уведомления</h1></div>
+        <div id="notificationInboxList" class="inbox-list" aria-live="polite">
+            <div class="inbox-empty"><span aria-hidden="true">✨</span><div>Пока нет новых уведомлений</div></div>
+        </div>
     </div>
 </section>
 
