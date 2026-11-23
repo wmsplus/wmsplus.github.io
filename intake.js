@@ -42,7 +42,6 @@
     // permission is always backed by the live Supabase session.
     const LS_MOBILE_USER = 'wmsplus_mobile_auth_user';
     const LS_AREA = 'wmsplus_intake_area';
-    const MANAGEMENT_ACCESS_CODE = 'extended_menu';
 
     const screens = Array.from(document.querySelectorAll('.screen'));
     function showScreen(id) {
@@ -380,20 +379,14 @@
         state.area = null;
     }
 
-    function hasManagementAccess() {
-        return state.accesses.includes(MANAGEMENT_ACCESS_CODE);
-    }
-
-    function screenRequiresManagementAccess(screenId) {
-        return screenId === 'screenViolations' || screenId === 'screenPasses';
-    }
-
     function applyRoleAccess() {
-        const hasManagement = hasManagementAccess();
         const violations = document.getElementById('openViolationsBtn');
         const passes = document.getElementById('openPassesBtn');
-        if (violations) violations.hidden = !hasManagement;
-        if (passes) passes.hidden = !hasManagement;
+        // A verified WMS+ profile is the baseline permission for the mobile
+        // workplace.  `accesses` stays loaded into state for future granular
+        // capabilities, but it must never hide the staff services by default.
+        if (violations) violations.hidden = false;
+        if (passes) passes.hidden = false;
     }
 
     async function loadProfileForSession(session) {
@@ -473,9 +466,6 @@
         state.pendingScreen = screenId || 'screenHome';
         if (!state.user || !state.employeeId || !state.fullName) {
             showScreen('screenAuth');
-        } else if (screenRequiresManagementAccess(state.pendingScreen) && !hasManagementAccess()) {
-            state.pendingScreen = 'screenHome';
-            showScreen('screenHome');
         } else if (!state.area) {
             showScreen('screenArea');
         } else {
