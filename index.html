@@ -121,6 +121,11 @@
         cursor: pointer;
     }
     .secondary-btn:disabled { opacity: .6; cursor: default; }
+    .secondary-btn.is-danger {
+        border-color: rgba(220,38,38,.28);
+        background: #fff6f6;
+        color: #c51f31;
+    }
     .msg { margin-top: 12px; font-size: 13px; font-weight: 600; text-align: center; min-height: 18px; }
     .msg.is-error { color: var(--danger); }
     .auth-screen { padding: 24px 20px; }
@@ -171,7 +176,7 @@
         font-size: 13px;
         font-weight: 700;
         color: var(--muted);
-        cursor: pointer;
+        cursor: default;
         z-index: 10;
     }
 
@@ -377,6 +382,28 @@
     .profile-id { margin: 0 0 22px; color: rgba(36,32,56,.6); font-size: 13px; font-weight: 700; }
     .profile-area { margin: 0 0 12px; padding: 11px 13px; border-radius: 12px; background: #f7f5ff; color: rgba(36,32,56,.72); font-size: 13px; font-weight: 700; }
     .profile-card .secondary-btn { text-align: center; }
+    .profile-settings-btn {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        margin-top: 10px;
+        padding: 12px 13px;
+        border: 1px solid rgba(36,32,56,.12);
+        border-radius: 12px;
+        background: #f9f8fe;
+        color: var(--muted);
+        font: inherit;
+        font-size: 14px;
+        font-weight: 750;
+        text-align: left;
+        cursor: pointer;
+    }
+    .profile-settings-btn:active { background: #eee9ff; transform: scale(.99); }
+    .profile-settings-btn .settings-chevron { margin-left: auto; color: rgba(36,32,56,.46); font-size: 19px; }
+    .notifications-card { text-align: left; }
+    .notifications-card h1 { text-align: left; }
+    .notifications-card > p { margin: 4px 0 20px; color: rgba(36,32,56,.62); font-size: 14px; line-height: 1.4; }
 
     .mobile-tabbar {
         position: fixed;
@@ -545,7 +572,7 @@
 </section>
 
 <section id="screenHome" class="screen home-screen">
-    <button id="areaPillHome" class="area-pill home-area-pill" type="button" aria-label="Сменить участок"><span id="areaPillHomeText"></span> ✎</button>
+    <div id="areaPillHome" class="area-pill home-area-pill"><span id="areaPillHomeText"></span></div>
     <div id="shiftHeaderHome" class="shift-header"></div>
     <div class="home-card">
         <div class="home-brand">
@@ -560,20 +587,11 @@
                 <span class="home-menu-icon">📦</span>
                 <span class="home-menu-copy"><span class="home-menu-title">Проблемный товар</span><span class="home-menu-note">Без ШК, 2 ШК и пустая упаковка</span></span>
             </button>
-            <button id="openViolationsBtn" class="home-menu-btn" type="button">
-                <span class="home-menu-icon">⚠️</span>
-                <span class="home-menu-copy"><span class="home-menu-title">Нарушения</span><span class="home-menu-note">Фиксация ошибок процесса</span></span>
-            </button>
             <button id="openPassesBtn" class="home-menu-btn" type="button">
                 <span class="home-menu-icon">🪪</span>
                 <span class="home-menu-copy"><span class="home-menu-title">Печать пропусков</span><span class="home-menu-note">Подготовка пропуска сотрудника</span></span>
             </button>
-            <button id="pushSetupBtn" class="home-menu-btn home-push-btn" type="button">
-                <span class="home-menu-icon">🔔</span>
-                <span class="home-menu-copy"><span id="pushSetupTitle" class="home-menu-title">Включить уведомления</span><span id="pushSetupNote" class="home-menu-note">Получайте тестовые уведомления WMS+</span></span>
-            </button>
         </div>
-        <div id="pushStatus" class="home-push-status" role="status" aria-live="polite"></div>
     </div>
 </section>
 
@@ -584,12 +602,26 @@
         <p id="profileId" class="profile-id">ID —</p>
         <p id="profileArea" class="profile-area">Участок не выбран</p>
         <button id="profileChangeAreaBtn" class="secondary-btn" type="button">Сменить участок</button>
-        <button id="profileLogoutBtn" class="secondary-btn" type="button">Выйти из аккаунта</button>
+        <button id="profileNotificationsBtn" class="profile-settings-btn" type="button"><span aria-hidden="true">🔔</span><span>Уведомления</span><span class="settings-chevron" aria-hidden="true">›</span></button>
+        <button id="profileLogoutBtn" class="secondary-btn is-danger" type="button">Выйти из аккаунта</button>
+    </div>
+</section>
+
+<section id="screenNotifications" class="screen">
+    <button id="backToProfileFromNotificationsBtn" class="back-btn" type="button" aria-label="К профилю">←</button>
+    <div class="screen-card notifications-card">
+        <div class="placeholder-icon">🔔</div>
+        <h1>Уведомления</h1>
+        <p>Настройте уведомления для этого устройства. После включения придёт тестовое сообщение.</p>
+        <button id="pushSetupBtn" class="home-menu-btn home-push-btn" type="button">
+            <span class="home-menu-icon">🔔</span>
+            <span class="home-menu-copy"><span id="pushSetupTitle" class="home-menu-title">Включить уведомления</span><span id="pushSetupNote" class="home-menu-note">Получайте тестовые уведомления WMS+</span></span>
+        </button>
+        <div id="pushStatus" class="home-push-status" role="status" aria-live="polite"></div>
     </div>
 </section>
 
 <section id="screenViolations" class="screen">
-    <button class="back-btn js-home" type="button" aria-label="В меню">⌂</button>
     <div class="screen-card violators-card">
         <div class="violators-title-row"><div class="placeholder-icon">⚠️</div><h1>Нарушения</h1></div>
         <div class="period-switch" role="group" aria-label="Период нарушений">
@@ -615,7 +647,6 @@
 </section>
 
 <section id="screenPasses" class="screen">
-    <button class="back-btn js-home" type="button" aria-label="В меню">⌂</button>
     <div class="screen-card placeholder-card">
         <div class="placeholder-icon">🪪</div>
         <h1>Печать пропусков</h1>
@@ -629,14 +660,12 @@
         <button class="area-btn" data-area="ХАБ" type="button">ХАБ</button>
         <button class="area-btn" data-area="Упаковка" type="button">Упаковка</button>
         <button class="area-btn" data-area="Маркетплейс" type="button">Маркетплейс</button>
-        <button id="logoutBtn" class="secondary-btn" type="button">Выйти из аккаунта</button>
     </div>
 </section>
 
 <section id="screenEntryType" class="screen">
-    <div id="areaPillEntry" class="area-pill"><span id="areaPillEntryText"></span> ✎</div>
+    <div id="areaPillEntry" class="area-pill"><span id="areaPillEntryText"></span></div>
     <div id="shiftHeaderEntry" class="shift-header"></div>
-    <button id="backHomeFromEntryBtn" class="back-btn" type="button" aria-label="В меню">⌂</button>
     <div class="screen-card" style="text-align:center;">
         <h1>Выберите тип заявки</h1>
         <button class="area-btn" data-entry="no-shk" type="button">Товар без ШК</button>
@@ -646,7 +675,7 @@
 </section>
 
 <section id="screenItemType" class="screen">
-    <div id="areaPillType" class="area-pill"><span id="areaPillTypeText"></span> ✎</div>
+    <div id="areaPillType" class="area-pill"><span id="areaPillTypeText"></span></div>
     <div id="shiftHeaderType" class="shift-header"></div>
     <button id="backToEntryTypeBtn" class="back-btn" type="button">←</button>
     <div class="screen-card" style="text-align:center;">
@@ -659,7 +688,7 @@
 </section>
 
 <section id="screen2Shk" class="screen">
-    <div id="areaPill2Shk" class="area-pill"><span id="areaPill2ShkText"></span> ✎</div>
+    <div id="areaPill2Shk" class="area-pill"><span id="areaPill2ShkText"></span></div>
     <div id="shiftHeader2Shk" class="shift-header"></div>
     <button id="backToEntryFrom2ShkBtn" class="back-btn" type="button">←</button>
     <div class="screen-card">
@@ -677,7 +706,7 @@
 </section>
 
 <section id="screenEmptyPackage" class="screen">
-    <div id="areaPillEmpty" class="area-pill"><span id="areaPillEmptyText"></span> ✎</div>
+    <div id="areaPillEmpty" class="area-pill"><span id="areaPillEmptyText"></span></div>
     <div id="shiftHeaderEmpty" class="shift-header"></div>
     <button id="backToEntryFromEmptyBtn" class="back-btn" type="button">←</button>
     <div class="screen-card">
@@ -693,7 +722,7 @@
 </section>
 
 <section id="screenCategory" class="screen">
-    <div id="areaPillCategory" class="area-pill"><span id="areaPillCategoryText"></span> ✎</div>
+    <div id="areaPillCategory" class="area-pill"><span id="areaPillCategoryText"></span></div>
     <div id="shiftHeaderCategory" class="shift-header"></div>
     <button id="backToTypeBtn" class="back-btn" type="button">←</button>
     <div style="width:100%; max-width:420px;">
@@ -704,7 +733,7 @@
 </section>
 
 <section id="screenItemName" class="screen">
-    <div id="areaPillName" class="area-pill"><span id="areaPillNameText"></span> ✎</div>
+    <div id="areaPillName" class="area-pill"><span id="areaPillNameText"></span></div>
     <div id="shiftHeaderName" class="shift-header"></div>
     <button id="backToCategoryBtn" class="back-btn" type="button">←</button>
     <div class="screen-card">
@@ -719,7 +748,7 @@
 </section>
 
 <section id="screenPhoto" class="screen">
-    <div id="areaPillPhoto" class="area-pill"><span id="areaPillPhotoText"></span> ✎</div>
+    <div id="areaPillPhoto" class="area-pill"><span id="areaPillPhotoText"></span></div>
     <div id="shiftHeaderPhoto" class="shift-header"></div>
     <button id="backToNameBtn" class="back-btn" type="button">←</button>
     <div class="screen-card" style="text-align:center;">
@@ -732,7 +761,7 @@
 </section>
 
 <section id="screenStickerScan" class="screen">
-    <div id="areaPillSticker" class="area-pill"><span id="areaPillStickerText"></span> ✎</div>
+    <div id="areaPillSticker" class="area-pill"><span id="areaPillStickerText"></span></div>
     <div id="shiftHeaderSticker" class="shift-header"></div>
     <button id="backToPhotoFromScanBtn" class="back-btn" type="button">←</button>
     <div class="screen-card" style="text-align:center;">
@@ -746,7 +775,7 @@
 </section>
 
 <section id="screenStickerSaved" class="screen">
-    <div id="areaPillStickerSaved" class="area-pill"><span id="areaPillStickerSavedText"></span> ✎</div>
+    <div id="areaPillStickerSaved" class="area-pill"><span id="areaPillStickerSavedText"></span></div>
     <div id="shiftHeaderStickerSaved" class="shift-header"></div>
     <div class="screen-card" style="text-align:center;">
         <h1>Стикер сохранён</h1>
@@ -757,7 +786,7 @@
 </section>
 
 <section id="screenInstrSlide" class="screen">
-    <div id="areaPillInstr" class="area-pill"><span id="areaPillInstrText"></span> ✎</div>
+    <div id="areaPillInstr" class="area-pill"><span id="areaPillInstrText"></span></div>
     <div id="shiftHeaderInstr" class="shift-header"></div>
     <button id="backToInstrPrevBtn" class="back-btn" type="button">←</button>
     <div class="screen-card" style="text-align:center;">
@@ -769,7 +798,7 @@
 </section>
 
 <section id="screenTakeToHub" class="screen">
-    <div id="areaPillHub" class="area-pill"><span id="areaPillHubText"></span> ✎</div>
+    <div id="areaPillHub" class="area-pill"><span id="areaPillHubText"></span></div>
     <div id="shiftHeaderHub" class="shift-header"></div>
     <div class="screen-card" style="text-align:center;">
         <h1>Отнесите товар на ХАБ</h1>
@@ -778,7 +807,7 @@
 </section>
 
 <section id="screenShiftCloseList" class="screen">
-    <div id="areaPillCloseList" class="area-pill"><span id="areaPillCloseListText"></span> ✎</div>
+    <div id="areaPillCloseList" class="area-pill"><span id="areaPillCloseListText"></span></div>
     <div id="shiftHeaderCloseList" class="shift-header"></div>
     <button id="backFromCloseListBtn" class="back-btn" type="button">←</button>
     <div class="screen-card" style="text-align:center;">
@@ -789,7 +818,7 @@
 </section>
 
 <section id="screenShiftClose" class="screen">
-    <div id="areaPillClose" class="area-pill"><span id="areaPillCloseText"></span> ✎</div>
+    <div id="areaPillClose" class="area-pill"><span id="areaPillCloseText"></span></div>
     <div id="shiftHeaderClose" class="shift-header"></div>
     <button id="backToListFromCloseBtn" class="back-btn" type="button">←</button>
     <div class="screen-card" style="text-align:center;">
@@ -801,7 +830,7 @@
 </section>
 
 <section id="screenShiftCloseQr" class="screen">
-    <div id="areaPillCloseQr" class="area-pill"><span id="areaPillCloseQrText"></span> ✎</div>
+    <div id="areaPillCloseQr" class="area-pill"><span id="areaPillCloseQrText"></span></div>
     <div id="shiftHeaderCloseQr" class="shift-header"></div>
     <button id="backToCloseFromQrBtn" class="back-btn" type="button">←</button>
     <div class="screen-card" style="text-align:center;">

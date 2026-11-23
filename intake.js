@@ -53,7 +53,7 @@
 
     function mobileTabForScreen(screenId) {
         if (screenId === 'screenViolations' || screenId === 'screenEmployeeViolations') return 'violations';
-        if (screenId === 'screenProfile') return 'profile';
+        if (screenId === 'screenProfile' || screenId === 'screenNotifications') return 'profile';
         if (screenId === 'screenArea' && state.pendingScreen === 'screenProfile') return 'profile';
         return 'home';
     }
@@ -62,7 +62,9 @@
         const nav = document.getElementById('mobileTabbar');
         if (!nav) return;
         const loggedIn = Boolean(state && state.user);
-        nav.hidden = !loggedIn || screenId === 'screenAuth';
+        // Once a "Без ШК" name is confirmed, the worker must finish the
+        // active fixation before leaving for another main section.
+        nav.hidden = !loggedIn || screenId === 'screenAuth' || Boolean(state.noShkFixationLocked);
         if (nav.hidden) return;
         const activeTab = mobileTabForScreen(screenId);
         const tabIndex = { home: 0, violations: 1, profile: 2 }[activeTab] || 0;
@@ -170,6 +172,7 @@
         photoPath: null,
         stickerCode: null,
         spillFlag: false,
+        noShkFixationLocked: false,
         pendingScreen: 'screenHome',
         violations: {
             loading: false,
@@ -518,15 +521,14 @@
         state.fullName = null;
         state.accesses = [];
         state.area = null;
+        state.noShkFixationLocked = false;
     }
 
     function applyRoleAccess() {
-        const violations = document.getElementById('openViolationsBtn');
         const passes = document.getElementById('openPassesBtn');
         // A verified WMS+ profile is the baseline permission for the mobile
         // workplace.  `accesses` stays loaded into state for future granular
         // capabilities, but it must never hide the staff services by default.
-        if (violations) violations.hidden = false;
         if (passes) passes.hidden = false;
     }
 
@@ -633,7 +635,6 @@
     }
 
     document.getElementById('openProblemItemBtn').addEventListener('click', goToStart);
-    document.getElementById('openViolationsBtn').addEventListener('click', () => openProtectedScreen('screenViolations'));
     document.getElementById('openPassesBtn').addEventListener('click', () => openProtectedScreen('screenPasses'));
     document.getElementById('pushSetupBtn').addEventListener('click', () => { void enableOrTestPush(); });
     document.querySelectorAll('[data-mobile-tab]').forEach((button) => {
@@ -646,8 +647,6 @@
             else if (tab === 'profile') openProtectedScreen('screenProfile');
         });
     });
-    document.querySelectorAll('.js-home').forEach((button) => button.addEventListener('click', openHome));
-    document.getElementById('backHomeFromEntryBtn').addEventListener('click', openHome);
 
     function renderWeeklyViolators() {
         const list = document.getElementById('violatorsList');
@@ -863,25 +862,18 @@
             openProtectedScreen(state.pendingScreen);
         });
     });
-    document.getElementById('logoutBtn').addEventListener('click', () => { void signOut(); });
-    document.getElementById('profileLogoutBtn').addEventListener('click', () => { void signOut(); });
+    document.getElementById('profileLogoutBtn').addEventListener('click', () => {
+        if (window.confirm('Выйти из аккаунта на этом устройстве?')) void signOut();
+    });
     document.getElementById('profileChangeAreaBtn').addEventListener('click', () => {
         state.pendingScreen = 'screenProfile';
         showScreen('screenArea');
     });
-
-    // ---------- Area pill (pencil) on wizard screens ----------
-    [
-        'areaPillHome', 'areaPillEntry', 'areaPillType', 'areaPillCategory', 'areaPillName',
-        'areaPillPhoto', 'areaPillSticker', 'areaPill2Shk', 'areaPillEmpty',
-        'areaPillStickerSaved', 'areaPillInstr', 'areaPillHub', 'areaPillCloseList',
-        'areaPillClose', 'areaPillCloseQr',
-    ].forEach((id) => {
-        document.getElementById(id).addEventListener('click', () => {
-            stopQrScan();
-            stopCloseQrScan();
-            showScreen('screenArea');
-        });
+    document.getElementById('profileNotificationsBtn').addEventListener('click', () => {
+        openProtectedScreen('screenNotifications');
+    });
+    document.getElementById('backToProfileFromNotificationsBtn').addEventListener('click', () => {
+        openProtectedScreen('screenProfile');
     });
 
     // ---------- Entry-type screen ----------
@@ -975,6 +967,7 @@
             return false;
         }
         state.itemText = val;
+        state.noShkFixationLocked = true;
         itemNameMsg.textContent = '';
         itemNameMsg.className = 'msg';
         return true;
@@ -1228,6 +1221,7 @@
                     if (historyError) console.warn('sticker history insert failed:', historyError);
                 }
             });
+            state.noShkFixationLocked = false;
             const scanBackBtn = document.getElementById('backToPhotoFromScanBtn');
             if (scanBackBtn) scanBackBtn.disabled = false;
             if (state.stickerCode) {
@@ -1250,6 +1244,7 @@
         state.photoPath = null;
         state.stickerCode = null;
         state.spillFlag = false;
+        state.noShkFixationLocked = false;
         showScreen('screenEntryType');
     });
 
