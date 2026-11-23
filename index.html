@@ -668,6 +668,66 @@
     .employee-violations-table th { position: sticky; top: 0; background: #f5f2ff; color: rgba(36,32,56,.65); font-size: 10px; letter-spacing: .03em; text-align: left; text-transform: uppercase; }
     .employee-violations-table th, .employee-violations-table td { padding: 10px 8px; overflow-wrap: anywhere; word-break: break-word; border-bottom: 1px solid rgba(36,32,56,.08); vertical-align: top; }
     .employee-violations-table tr:last-child td { border-bottom: 0; }
+    #screenEmployeeViolations,
+    #screenPinnedEmployees {
+        justify-content: flex-start;
+        padding-top: calc(20px + env(safe-area-inset-top));
+        padding-bottom: calc(82px + env(safe-area-inset-bottom));
+    }
+    #screenEmployeeViolations .employee-card,
+    #screenPinnedEmployees .pinned-card {
+        height: 100%;
+        max-height: none;
+        display: flex;
+        flex-direction: column;
+        text-align: left;
+    }
+    .employee-heading { margin: 0 44px 14px 0; }
+    .employee-heading h1 { margin: 0; font-size: 21px; line-height: 1.12; text-align: left; letter-spacing: -.025em; }
+    .employee-heading p { margin: 4px 0 0; color: rgba(36,32,56,.62); font-size: 13px; font-weight: 750; }
+    .employee-talks-badge { display: inline-flex; margin-top: 8px; padding: 5px 8px; border-radius: 999px; background: #eee9ff; color: var(--accent); font-size: 11px; font-weight: 850; }
+    .employee-talks-badge.is-repeat { background: #fff0f1; color: #d92d3e; }
+    .employee-bento { display: grid; grid-template-columns: minmax(0, 1fr) 118px; gap: 10px; margin-bottom: 10px; }
+    .employee-metric-card,
+    .employee-qr-card { min-height: 116px; border-radius: 18px; background: #f4f1ff; }
+    .employee-metric-card { display: flex; flex-direction: column; justify-content: center; gap: 4px; padding: 14px; }
+    .employee-metric-label { color: rgba(36,32,56,.56); font-size: 10px; font-weight: 850; letter-spacing: .045em; text-transform: uppercase; }
+    .employee-metric-value { font-size: 27px; font-weight: 900; line-height: 1; letter-spacing: -.045em; }
+    .employee-metric-price { margin-top: 7px; font-size: 16px; font-weight: 850; line-height: 1.05; letter-spacing: -.025em; }
+    .employee-qr-card { display: grid; place-items: center; padding: 10px; }
+    .employee-qr-card #employeeQr { width: 94px; height: 94px; display: grid; place-items: center; overflow: hidden; }
+    .employee-qr-card #employeeQr img,
+    .employee-qr-card #employeeQr canvas { max-width: 94px; max-height: 94px; }
+    .employee-actions { display: grid; grid-template-columns: minmax(0, 1fr) 46px 46px; gap: 8px; margin-bottom: 12px; padding: 7px; border-radius: 17px; background: #eee9ff; }
+    .employee-period-switch { display: grid; grid-template-columns: 1fr 1fr; min-width: 0; padding: 3px; border-radius: 12px; background: #fff; }
+    .employee-period-switch button { min-width: 0; border: 0; border-radius: 9px; padding: 7px 4px; background: transparent; color: rgba(36,32,56,.62); font: inherit; font-size: 11px; font-weight: 850; cursor: pointer; }
+    .employee-period-switch button.is-active { background: #f0ecff; color: var(--accent); }
+    .employee-action-btn { display: grid; place-items: center; border: 0; border-radius: 12px; background: #fff; color: var(--accent); font-size: 20px; cursor: pointer; }
+    .employee-action-btn:active { transform: scale(.93); background: #faf9ff; }
+    .employee-action-btn.is-active { background: var(--accent); color: #fff; }
+    .employee-status { margin: -4px 0 10px; min-height: 17px; color: rgba(36,32,56,.62); font-size: 12px; font-weight: 700; }
+    .employee-status.is-error { color: var(--danger); }
+    .employee-violations-table-wrap { flex: 1; min-height: 0; max-height: none; }
+    .employee-violations-table tr.is-discussed td { background: #ecfdf3; color: #17734a; }
+    .employee-violations-table tr.is-discussed td:first-child { box-shadow: inset 3px 0 #22a06b; }
+    .violator-row.is-repeat { border-color: rgba(217,45,62,.38); background: #fff7f7; }
+    .violator-row.is-repeat .violator-count { color: #d92d3e; }
+    .pinned-list { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; display: grid; align-content: start; gap: 8px; }
+    .pinned-row { width: 100%; display: flex; align-items: center; gap: 10px; padding: 12px; border: 1px solid rgba(36,32,56,.1); border-radius: 13px; background: #f9f8fe; color: var(--muted); font: inherit; text-align: left; cursor: pointer; }
+    .pinned-row strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+    .pinned-row small { display: block; margin-top: 3px; color: rgba(36,32,56,.58); font-size: 11px; font-weight: 700; }
+    .pinned-row span:first-child { font-size: 19px; }
+    .talk-dialog { position: fixed; inset: 0; z-index: 60; display: grid; place-items: end center; padding: 20px; background: rgba(25,20,48,.38); backdrop-filter: blur(8px); }
+    .talk-dialog[hidden] { display: none; }
+    .talk-dialog-card { width: min(100%, 420px); max-height: min(74dvh, 620px); display: flex; flex-direction: column; padding: 22px; border-radius: 24px; background: #fff; box-shadow: 0 22px 56px rgba(25,20,48,.28); }
+    .talk-dialog-card h2 { margin: 0 0 8px; font-size: 20px; line-height: 1.15; }
+    .talk-dialog-card p { margin: 0 0 14px; color: rgba(36,32,56,.66); font-size: 14px; line-height: 1.4; }
+    .talk-summary { min-height: 0; overflow-y: auto; margin-bottom: 14px; border: 1px solid rgba(36,32,56,.1); border-radius: 14px; }
+    .talk-summary-row { display: flex; justify-content: space-between; gap: 12px; padding: 11px 12px; border-bottom: 1px solid rgba(36,32,56,.08); font-size: 13px; font-weight: 700; }
+    .talk-summary-row:last-child { border-bottom: 0; }
+    .talk-dialog-actions { display: grid; grid-template-columns: 1fr 1.35fr; gap: 9px; }
+    .talk-dialog-actions .primary-btn,
+    .talk-dialog-actions .secondary-btn { margin: 0; }
 
     @media (max-height: 700px) {
         .screen { padding-top: calc(78px + env(safe-area-inset-top)); padding-bottom: calc(84px + env(safe-area-inset-bottom)); }
@@ -765,6 +825,11 @@
                 <span><strong>Печать пропусков</strong><small>Подготовка пропуска сотрудника</small></span>
                 <span class="home-bento-passes-arrow" aria-hidden="true">›</span>
             </button>
+            <button id="openPinnedEmployeesBtn" class="home-bento-passes" type="button" hidden>
+                <span class="home-bento-passes-icon" aria-hidden="true">📌</span>
+                <span><strong>Мои исполнители</strong><small id="pinnedEmployeesNote">Закреплённые сотрудники</small></span>
+                <span class="home-bento-passes-arrow" aria-hidden="true">›</span>
+            </button>
         </div>
     </div>
 </section>
@@ -835,15 +900,32 @@
 
 <section id="screenEmployeeViolations" class="screen">
     <button id="backToViolatorsBtn" class="back-btn" type="button" aria-label="К списку нарушителей">←</button>
-    <div class="screen-card violators-card">
-        <div class="violators-title-row"><div class="placeholder-icon">⚠️</div><div><h1 id="employeeViolationsName">Сотрудник</h1><p id="employeeViolationsId" class="violators-caption" style="margin:3px 0 0;"></p></div></div>
-        <div id="employeeViolationsTotal" class="employee-violations-total">Загружаю…</div>
+    <div class="screen-card employee-card">
+        <div class="employee-heading"><h1 id="employeeViolationsName">Сотрудник</h1><p id="employeeViolationsId">ID —</p><span id="employeeTalksBadge" class="employee-talks-badge">Бесед: 0</span></div>
+        <div class="employee-bento">
+            <div class="employee-metric-card"><span class="employee-metric-label">Фиксаций</span><strong id="employeeViolationsCount" class="employee-metric-value">—</strong><strong id="employeeViolationsTotal" class="employee-metric-price">—</strong></div>
+            <div class="employee-qr-card"><div id="employeeQr" aria-label="QR-код ID сотрудника"></div></div>
+        </div>
+        <div class="employee-actions">
+            <div class="employee-period-switch" role="group" aria-label="Период статистики сотрудника"><button class="is-active" type="button" data-employee-period="7">Неделя</button><button type="button" data-employee-period="30">Месяц</button></div>
+            <button id="pinEmployeeBtn" class="employee-action-btn" type="button" title="Закрепить исполнителя" aria-label="Закрепить исполнителя">📌</button>
+            <button id="talkEmployeeBtn" class="employee-action-btn" type="button" title="Провести беседу" aria-label="Провести беседу">💬</button>
+        </div>
+        <div id="employeeStatus" class="employee-status" role="status" aria-live="polite"></div>
         <div class="employee-violations-table-wrap">
             <table class="employee-violations-table">
                 <thead><tr><th>Дата фиксации</th><th>Нарушение</th><th>ШК</th></tr></thead>
                 <tbody id="employeeViolationsBody"></tbody>
             </table>
         </div>
+    </div>
+</section>
+
+<section id="screenPinnedEmployees" class="screen">
+    <button id="backFromPinnedEmployeesBtn" class="back-btn" type="button" aria-label="На главную">←</button>
+    <div class="screen-card pinned-card">
+        <div class="inbox-title-row"><div class="placeholder-icon" aria-hidden="true">📌</div><h1>Мои исполнители</h1></div>
+        <div id="pinnedEmployeesList" class="pinned-list" aria-live="polite"></div>
     </div>
 </section>
 
@@ -1060,6 +1142,15 @@
         <button id="againBtn" class="primary-btn" type="button">Заполнить ещё раз</button>
     </div>
 </section>
+
+<div id="talkDialog" class="talk-dialog" role="dialog" aria-modal="true" aria-labelledby="talkDialogTitle" hidden>
+    <div class="talk-dialog-card">
+        <h2 id="talkDialogTitle">Проведите беседу</h2>
+        <p id="talkDialogText"></p>
+        <div id="talkSummary" class="talk-summary"></div>
+        <div class="talk-dialog-actions"><button id="cancelTalkBtn" class="secondary-btn" type="button">Отмена</button><button id="confirmTalkBtn" class="primary-btn" type="button">✓ Беседа проведена</button></div>
+    </div>
+</div>
 
 <script src="shift-close.js"></script>
 <script src="print-tspl.js"></script>

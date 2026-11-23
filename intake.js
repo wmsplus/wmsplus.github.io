@@ -192,7 +192,12 @@
             detailLoading: false,
             detailError: '',
             detailRows: [],
+            detailPeriodDays: 7,
+            talks: [],
+            isPinned: false,
+            talkDraft: null,
         },
+        pinnedEmployees: [],
     };
 
     // Priority when more than one trigger applies to the same item: Шредер
@@ -524,6 +529,7 @@
         state.accesses = mobileUser.accesses;
         localStorage.setItem(LS_MOBILE_USER, JSON.stringify(mobileUser));
         void refreshPushState();
+        void loadPinnedEmployees();
     }
 
     function clearProfile() {
@@ -539,6 +545,7 @@
         state.accesses = [];
         state.area = null;
         state.noShkFixationLocked = false;
+        state.pinnedEmployees = [];
     }
 
     function applyRoleAccess() {
@@ -715,6 +722,8 @@
 
     document.getElementById('openProblemItemBtn').addEventListener('click', goToStart);
     document.getElementById('openPassesBtn').addEventListener('click', () => openProtectedScreen('screenPasses'));
+    document.getElementById('openPinnedEmployeesBtn').addEventListener('click', () => openProtectedScreen('screenPinnedEmployees'));
+    document.getElementById('backFromPinnedEmployeesBtn').addEventListener('click', () => openProtectedScreen('screenHome'));
     document.getElementById('pushSetupBtn').addEventListener('click', () => { void enableOrTestPush(); });
     document.getElementById('notificationBellBtn').addEventListener('click', () => {
         const activeScreen = screens.find((screen) => screen.classList.contains('is-active'))?.id;
@@ -780,7 +789,7 @@
         state.violations.people.forEach((person, index) => {
             const row = document.createElement('button');
             row.type = 'button';
-            row.className = 'violator-row';
+            row.className = 'violator-row' + (person.isRepeatOffender ? ' is-repeat' : '');
             const rank = document.createElement('span');
             rank.className = 'violator-rank';
             rank.textContent = String(index + 1) + '.';
@@ -795,7 +804,7 @@
             personWrap.append(name, id);
             const count = document.createElement('span');
             count.className = 'violator-count';
-            count.textContent = person.count + ' нар.';
+            count.textContent = (person.isRepeatOffender ? '🔥 ' : '') + person.count + ' нар.';
             row.append(rank, personWrap, count);
             row.style.animationDelay = Math.min(index, 7) * 45 + 'ms';
             row.addEventListener('click', () => { void openEmployeeViolations(person); });
@@ -822,6 +831,8 @@
                     fullName: String(person.full_name || '').trim(),
                     count: Number(person.violation_count) || 0,
                     totalTaskPrice: Number(person.total_task_price) || 0,
+                    talkCount30: Number(person.talk_count_30) || 0,
+                    isRepeatOffender: Boolean(person.is_repeat_offender),
                 }))
                 .filter((person) => person.employeeId)
                 .map((person) => ({ ...person, fullName: person.fullName || 'ID ' + person.employeeId }));
@@ -860,27 +871,81 @@
         }).format(date);
     }
 
+    function compactEmployeeName(fullName) {
+        const normalized = String(fullName || '').trim().replace(/\s+/g, ' ');
+        if (normalized.length <= 27) return normalized || 'Сотрудник';
+        const parts = normalized.split(' ');
+        if (parts.length < 2) return normalized;
+        return parts[0] + ' ' + parts.slice(1).map((part) => part ? part[0] + '.' : '').join(' ');
+    }
+
+    function latestTalkCutoff() {
+        return state.violations.talks.reduce((latest, talk) => {
+            const time = new Date(talk.covered_until).getTime();
+            return Number.isFinite(time) && time > latest ? time : latest;
+        }, 0);
+    }
+
+    function isDiscussedViolation(item) {
+        const cutoff = latestTalkCutoff();
+        const createdAt = new Date(item.created_at).getTime();
+        return cutoff > 0 && Number.isFinite(createdAt) && createdAt <= cutoff;
+    }
+
+    function setEmployeeStatus(message, isError) {
+        const status = document.getElementById('employeeStatus');
+        if (!status) return;
+        status.textContent = message || '';
+        status.classList.toggle('is-error', Boolean(isError));
+    }
+
     function renderEmployeeViolations() {
         const person = state.violations.selected;
         const name = document.getElementById('employeeViolationsName');
         const id = document.getElementById('employeeViolationsId');
         const total = document.getElementById('employeeViolationsTotal');
+        const count = document.getElementById('employeeViolationsCount');
+        const talksBadge = document.getElementById('employeeTalksBadge');
+        const pinButton = document.getElementById('pinEmployeeBtn');
+        const talkButton = document.getElementById('talkEmployeeBtn');
         const body = document.getElementById('employeeViolationsBody');
-        if (!person || !name || !id || !total || !body) return;
+        if (!person || !name || !id || !total || !count || !talksBadge || !pinButton || !talkButton || !body) return;
 
-        name.textContent = person.fullName;
+        name.textContent = compactEmployeeName(person.fullName);
+        name.title = person.fullName;
         id.textContent = 'ID ' + person.employeeId;
+        renderQrInto('employeeQr', person.employeeId);
         body.replaceChildren();
+        pinButton.classList.toggle('is-active', state.violations.isPinned);
+        pinButton.textContent = state.violations.isPinned ? '📌' : '📍';
+        pinButton.title = state.violations.isPinned ? 'Открепить исполнителя' : 'Закрепить исполнителя';
+        pinButton.setAttribute('aria-label', pinButton.title);
         if (state.violations.detailLoading) {
-            total.textContent = 'Загружаю нарушения…';
+            count.textContent = '—';
+            total.textContent = 'Загружаю…';
+            talksBadge.textContent = 'Бесед: —';
+            talkButton.disabled = true;
             return;
         }
         if (state.violations.detailError) {
-            total.textContent = state.violations.detailError;
+            count.textContent = '—';
+            total.textContent = 'Ошибка загрузки';
+            talksBadge.textContent = 'Бесед: —';
+            setEmployeeStatus(state.violations.detailError, true);
+            talkButton.disabled = true;
             return;
         }
         const sum = state.violations.detailRows.reduce((amount, row) => amount + (Number(row.task_price) || 0), 0);
-        total.textContent = 'Суммарная стоимость нарушений: ' + formatRoubles(sum || person.totalTaskPrice);
+        const newRows = state.violations.detailRows.filter((row) => !isDiscussedViolation(row));
+        const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+        const talkCount30 = state.violations.talks.filter((talk) => new Date(talk.created_at).getTime() >= thirtyDaysAgo).length;
+        const isRepeatOffender = talkCount30 >= 3 && newRows.length > 0;
+        count.textContent = String(state.violations.detailRows.length);
+        total.textContent = formatRoubles(sum || person.totalTaskPrice);
+        talksBadge.textContent = isRepeatOffender ? '🔥 Злостный нарушитель · бесед: ' + talkCount30 : 'Бесед: ' + talkCount30;
+        talksBadge.classList.toggle('is-repeat', isRepeatOffender);
+        talkButton.disabled = newRows.length === 0;
+        setEmployeeStatus(newRows.length ? 'Новых нарушений: ' + newRows.length : 'Все нарушения уже обсуждены.');
         if (!state.violations.detailRows.length) {
             const row = document.createElement('tr');
             const cell = document.createElement('td');
@@ -892,6 +957,7 @@
         }
         state.violations.detailRows.forEach((item) => {
             const row = document.createElement('tr');
+            row.classList.toggle('is-discussed', isDiscussedViolation(item));
             [
                 formatViolationDate(item.created_at),
                 item.violation_type || '—',
@@ -905,14 +971,20 @@
         });
     }
 
-    async function openEmployeeViolations(person) {
+    async function openEmployeeViolations(person, keepPeriod) {
         state.violations.selected = person;
         state.violations.detailRows = [];
         state.violations.detailError = '';
         state.violations.detailLoading = true;
+        state.violations.talks = [];
+        state.violations.isPinned = false;
+        if (!keepPeriod) state.violations.detailPeriodDays = state.violations.periodDays;
+        document.querySelectorAll('[data-employee-period]').forEach((button) => {
+            button.classList.toggle('is-active', Number(button.dataset.employeePeriod) === state.violations.detailPeriodDays);
+        });
         showScreen('screenEmployeeViolations');
         renderEmployeeViolations();
-        const from = new Date(Date.now() - state.violations.periodDays * 24 * 60 * 60 * 1000).toISOString();
+        const from = new Date(Date.now() - state.violations.detailPeriodDays * 24 * 60 * 60 * 1000).toISOString();
         try {
             let query = supabaseClient
                 .from('wms_violations')
@@ -926,9 +998,17 @@
             query = /^\d+$/.test(person.employeeId)
                 ? query.or('culprit_employee_id.eq.' + person.employeeId + ',culprit_name.eq.' + person.employeeId)
                 : query.eq('culprit_employee_id', person.employeeId);
-            const { data, error } = await query;
-            if (error) throw error;
-            state.violations.detailRows = data || [];
+            const [violationsResult, talksResult, pinResult] = await Promise.all([
+                query,
+                supabaseClient.from('wms_mobile_violation_talks').select('created_at,covered_until,summary').eq('employee_id', person.employeeId).order('covered_until', { ascending: false }),
+                supabaseClient.from('wms_mobile_employee_pins').select('employee_id').eq('employee_id', person.employeeId).maybeSingle(),
+            ]);
+            if (violationsResult.error) throw violationsResult.error;
+            if (talksResult.error) throw talksResult.error;
+            if (pinResult.error) throw pinResult.error;
+            state.violations.detailRows = violationsResult.data || [];
+            state.violations.talks = talksResult.data || [];
+            state.violations.isPinned = Boolean(pinResult.data);
         } catch (error) {
             state.violations.detailError = 'Не удалось загрузить карточку сотрудника.';
             console.warn('employee violations load failed:', error);
@@ -938,11 +1018,148 @@
         }
     }
 
+    async function loadPinnedEmployees() {
+        if (!state.user) return;
+        try {
+            const { data, error } = await supabaseClient
+                .from('wms_mobile_employee_pins')
+                .select('employee_id,employee_name,created_at')
+                .order('created_at', { ascending: false });
+            if (error) throw error;
+            state.pinnedEmployees = (data || []).map((item) => ({
+                employeeId: String(item.employee_id || '').trim(),
+                fullName: String(item.employee_name || '').trim() || 'ID ' + String(item.employee_id || '').trim(),
+            })).filter((item) => item.employeeId);
+        } catch (error) {
+            console.warn('pinned employees load failed:', error);
+            state.pinnedEmployees = [];
+        }
+        renderPinnedEmployees();
+        const homeButton = document.getElementById('openPinnedEmployeesBtn');
+        const note = document.getElementById('pinnedEmployeesNote');
+        if (homeButton) homeButton.hidden = state.pinnedEmployees.length === 0;
+        if (note) note.textContent = state.pinnedEmployees.length + ' закреплённых';
+    }
+
+    function renderPinnedEmployees() {
+        const list = document.getElementById('pinnedEmployeesList');
+        if (!list) return;
+        list.replaceChildren();
+        if (!state.pinnedEmployees.length) {
+            const empty = document.createElement('div');
+            empty.className = 'violators-empty';
+            empty.textContent = 'Закреплённых исполнителей пока нет.';
+            list.appendChild(empty);
+            return;
+        }
+        state.pinnedEmployees.forEach((person) => {
+            const row = document.createElement('button');
+            row.type = 'button';
+            row.className = 'pinned-row';
+            row.innerHTML = '<span aria-hidden="true">📌</span><span><strong></strong><small></small></span>';
+            row.querySelector('strong').textContent = compactEmployeeName(person.fullName);
+            row.querySelector('small').textContent = 'ID ' + person.employeeId;
+            row.addEventListener('click', () => { void openEmployeeViolations({ ...person, count: 0, totalTaskPrice: 0 }, false); });
+            list.appendChild(row);
+        });
+    }
+
+    async function toggleEmployeePin() {
+        const person = state.violations.selected;
+        if (!person) return;
+        setEmployeeStatus(state.violations.isPinned ? 'Открепляю исполнителя…' : 'Закрепляю исполнителя…');
+        try {
+            const result = state.violations.isPinned
+                ? await supabaseClient.from('wms_mobile_employee_pins').delete().eq('employee_id', person.employeeId)
+                : await supabaseClient.from('wms_mobile_employee_pins').insert({ employee_id: person.employeeId, employee_name: person.fullName });
+            if (result.error) throw result.error;
+            state.violations.isPinned = !state.violations.isPinned;
+            await loadPinnedEmployees();
+            renderEmployeeViolations();
+            setEmployeeStatus(state.violations.isPinned ? 'Исполнитель закреплён.' : 'Исполнитель откреплён.');
+        } catch (error) {
+            console.warn('employee pin failed:', error);
+            setEmployeeStatus('Не удалось изменить закрепление.', true);
+        }
+    }
+
+    function openTalkDialog() {
+        const person = state.violations.selected;
+        const dialog = document.getElementById('talkDialog');
+        const text = document.getElementById('talkDialogText');
+        const summary = document.getElementById('talkSummary');
+        if (!person || !dialog || !text || !summary) return;
+        const freshRows = state.violations.detailRows.filter((row) => !isDiscussedViolation(row));
+        if (!freshRows.length) {
+            setEmployeeStatus('Новых нарушений для беседы нет.');
+            return;
+        }
+        const grouped = freshRows.reduce((result, row) => {
+            const label = String(row.violation_type || 'Без типа');
+            result[label] = (result[label] || 0) + 1;
+            return result;
+        }, {});
+        state.violations.talkDraft = { coveredUntil: new Date().toISOString(), summary: grouped };
+        text.textContent = 'Проведите беседу с «' + compactEmployeeName(person.fullName) + '» по новым нарушениям:';
+        summary.replaceChildren();
+        Object.entries(grouped).forEach(([label, value]) => {
+            const row = document.createElement('div');
+            row.className = 'talk-summary-row';
+            row.append(Object.assign(document.createElement('span'), { textContent: label }), Object.assign(document.createElement('strong'), { textContent: String(value) }));
+            summary.appendChild(row);
+        });
+        dialog.hidden = false;
+    }
+
+    function closeTalkDialog() {
+        const dialog = document.getElementById('talkDialog');
+        if (dialog) dialog.hidden = true;
+        state.violations.talkDraft = null;
+    }
+
+    async function confirmTalk() {
+        const person = state.violations.selected;
+        const draft = state.violations.talkDraft;
+        const button = document.getElementById('confirmTalkBtn');
+        if (!person || !draft || !button) return;
+        button.disabled = true;
+        try {
+            const { error } = await supabaseClient.from('wms_mobile_violation_talks').insert({
+                employee_id: person.employeeId,
+                covered_until: draft.coveredUntil,
+                summary: draft.summary,
+            });
+            if (error) throw error;
+            closeTalkDialog();
+            await loadWeeklyViolators(true);
+            await openEmployeeViolations(person, true);
+            setEmployeeStatus('Беседа отмечена. Новые нарушения будут показаны отдельно.');
+        } catch (error) {
+            console.warn('violation talk save failed:', error);
+            setEmployeeStatus('Не удалось сохранить беседу.', true);
+        } finally {
+            button.disabled = false;
+        }
+    }
+
     document.getElementById('backToViolatorsBtn').addEventListener('click', () => {
         state.violations.selected = null;
         showScreen('screenViolations');
         renderWeeklyViolators();
     });
+    document.querySelectorAll('[data-employee-period]').forEach((button) => {
+        button.addEventListener('click', () => {
+            const periodDays = Number(button.dataset.employeePeriod);
+            if (periodDays === state.violations.detailPeriodDays || !state.violations.selected) return;
+            state.violations.detailPeriodDays = periodDays;
+            document.querySelectorAll('[data-employee-period]').forEach((item) => item.classList.toggle('is-active', Number(item.dataset.employeePeriod) === periodDays));
+            void openEmployeeViolations(state.violations.selected, true);
+        });
+    });
+    document.getElementById('pinEmployeeBtn').addEventListener('click', () => { void toggleEmployeePin(); });
+    document.getElementById('talkEmployeeBtn').addEventListener('click', openTalkDialog);
+    document.getElementById('cancelTalkBtn').addEventListener('click', closeTalkDialog);
+    document.getElementById('confirmTalkBtn').addEventListener('click', () => { void confirmTalk(); });
 
     // ---------- Screen: Auth ----------
     document.getElementById('authSubmitBtn').addEventListener('click', () => { void submitAuth(); });
