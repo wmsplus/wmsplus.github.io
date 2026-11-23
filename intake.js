@@ -53,7 +53,7 @@
 
     function mobileTabForScreen(screenId) {
         if (screenId === 'screenViolations' || screenId === 'screenEmployeeViolations') return 'violations';
-        if (screenId === 'screenProfile' || screenId === 'screenNotifications') return 'profile';
+        if (screenId === 'screenProfile' || screenId === 'screenNotifications' || screenId === 'screenPassword') return 'profile';
         if (screenId === 'screenArea' && state.pendingScreen === 'screenProfile') return 'profile';
         return 'home';
     }
@@ -605,6 +605,68 @@
         showScreen('screenAuth');
     }
 
+    function setChangePasswordMessage(message, isError) {
+        const target = document.getElementById('changePasswordMsg');
+        target.textContent = message || '';
+        target.className = isError ? 'msg is-error' : 'msg';
+    }
+
+    function clearChangePasswordForm() {
+        ['currentPasswordInput', 'newPasswordInput', 'newPasswordConfirmInput'].forEach((id) => {
+            const input = document.getElementById(id);
+            if (input) input.value = '';
+        });
+        setChangePasswordMessage('');
+    }
+
+    async function changePassword() {
+        const currentInput = document.getElementById('currentPasswordInput');
+        const nextInput = document.getElementById('newPasswordInput');
+        const confirmInput = document.getElementById('newPasswordConfirmInput');
+        const submit = document.getElementById('changePasswordBtn');
+        const currentPassword = currentInput.value;
+        const nextPassword = nextInput.value;
+        const confirmation = confirmInput.value;
+
+        if (!currentPassword || !nextPassword || !confirmation) {
+            setChangePasswordMessage('Заполните все поля.', true);
+            return;
+        }
+        if (nextPassword.length < 8) {
+            setChangePasswordMessage('Новый пароль должен содержать не менее 8 символов.', true);
+            return;
+        }
+        if (nextPassword !== confirmation) {
+            setChangePasswordMessage('Новый пароль и его повтор не совпадают.', true);
+            return;
+        }
+
+        submit.disabled = true;
+        setChangePasswordMessage('Проверяю текущий пароль…');
+        try {
+            // A live session alone is not enough on a shared warehouse device:
+            // require the current password before changing the account secret.
+            const { error: verificationError } = await supabaseClient.auth.signInWithPassword({
+                email: String(state.employeeId) + '@wms.internal',
+                password: currentPassword,
+            });
+            if (verificationError) throw new Error('Текущий пароль указан неверно.');
+
+            setChangePasswordMessage('Сохраняю новый пароль…');
+            const { error } = await supabaseClient.auth.updateUser({ password: nextPassword });
+            if (error) throw error;
+            clearChangePasswordForm();
+            setChangePasswordMessage('Пароль успешно изменён.');
+        } catch (error) {
+            const message = error?.message === 'Текущий пароль указан неверно.'
+                ? error.message
+                : 'Не удалось изменить пароль. Попробуйте ещё раз.';
+            setChangePasswordMessage(message, true);
+        } finally {
+            submit.disabled = false;
+        }
+    }
+
     function openProtectedScreen(screenId) {
         state.pendingScreen = screenId || 'screenHome';
         if (!state.user || !state.employeeId || !state.fullName) {
@@ -874,6 +936,18 @@
     });
     document.getElementById('backToProfileFromNotificationsBtn').addEventListener('click', () => {
         openProtectedScreen('screenProfile');
+    });
+    document.getElementById('profilePasswordBtn').addEventListener('click', () => {
+        clearChangePasswordForm();
+        openProtectedScreen('screenPassword');
+    });
+    document.getElementById('backToProfileFromPasswordBtn').addEventListener('click', () => {
+        clearChangePasswordForm();
+        openProtectedScreen('screenProfile');
+    });
+    document.getElementById('changePasswordBtn').addEventListener('click', () => { void changePassword(); });
+    document.getElementById('newPasswordConfirmInput').addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') void changePassword();
     });
 
     // ---------- Entry-type screen ----------

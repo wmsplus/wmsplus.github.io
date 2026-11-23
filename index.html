@@ -603,6 +603,7 @@
         <p id="profileArea" class="profile-area">Участок не выбран</p>
         <button id="profileChangeAreaBtn" class="secondary-btn" type="button">Сменить участок</button>
         <button id="profileNotificationsBtn" class="profile-settings-btn" type="button"><span aria-hidden="true">🔔</span><span>Уведомления</span><span class="settings-chevron" aria-hidden="true">›</span></button>
+        <button id="profilePasswordBtn" class="profile-settings-btn" type="button"><span aria-hidden="true">🔐</span><span>Сменить пароль</span><span class="settings-chevron" aria-hidden="true">›</span></button>
         <button id="profileLogoutBtn" class="secondary-btn is-danger" type="button">Выйти из аккаунта</button>
     </div>
 </section>
@@ -618,6 +619,22 @@
             <span class="home-menu-copy"><span id="pushSetupTitle" class="home-menu-title">Включить уведомления</span><span id="pushSetupNote" class="home-menu-note">Получайте тестовые уведомления WMS+</span></span>
         </button>
         <div id="pushStatus" class="home-push-status" role="status" aria-live="polite"></div>
+    </div>
+</section>
+
+<section id="screenPassword" class="screen">
+    <button id="backToProfileFromPasswordBtn" class="back-btn" type="button" aria-label="К профилю">←</button>
+    <div class="screen-card notifications-card">
+        <div class="placeholder-icon">🔐</div>
+        <h1>Смена пароля</h1>
+        <p>Используйте не менее 8 символов. После смены новый пароль будет действовать для входа в приложение.</p>
+        <div class="auth-fields">
+            <input id="currentPasswordInput" class="field" type="password" autocomplete="current-password" placeholder="Текущий пароль" aria-label="Текущий пароль">
+            <input id="newPasswordInput" class="field" type="password" autocomplete="new-password" minlength="8" placeholder="Новый пароль" aria-label="Новый пароль">
+            <input id="newPasswordConfirmInput" class="field" type="password" autocomplete="new-password" minlength="8" placeholder="Повторите новый пароль" aria-label="Повторите новый пароль">
+        </div>
+        <button id="changePasswordBtn" class="primary-btn" type="button">Сменить пароль</button>
+        <div id="changePasswordMsg" class="msg" role="status" aria-live="polite"></div>
     </div>
 </section>
 
