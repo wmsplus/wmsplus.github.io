@@ -47,7 +47,32 @@
     const screens = Array.from(document.querySelectorAll('.screen'));
     function showScreen(id) {
         screens.forEach((s) => s.classList.toggle('is-active', s.id === id));
+        updateBottomNavigation(id);
         void refreshShiftCounter();
+    }
+
+    function mobileTabForScreen(screenId) {
+        if (screenId === 'screenViolations' || screenId === 'screenEmployeeViolations') return 'violations';
+        if (screenId === 'screenProfile') return 'profile';
+        if (screenId === 'screenArea' && state.pendingScreen === 'screenProfile') return 'profile';
+        return 'home';
+    }
+
+    function updateBottomNavigation(screenId) {
+        const nav = document.getElementById('mobileTabbar');
+        if (!nav) return;
+        const loggedIn = Boolean(state && state.user);
+        nav.hidden = !loggedIn || screenId === 'screenAuth';
+        if (nav.hidden) return;
+        const activeTab = mobileTabForScreen(screenId);
+        const tabIndex = { home: 0, violations: 1, profile: 2 }[activeTab] || 0;
+        nav.style.setProperty('--tab-index', String(tabIndex));
+        nav.querySelectorAll('[data-mobile-tab]').forEach((button) => {
+            const active = button.dataset.mobileTab === activeTab;
+            button.classList.toggle('is-active', active);
+            if (active) button.setAttribute('aria-current', 'page');
+            else button.removeAttribute('aria-current');
+        });
     }
 
     // Упаковка has no shift-box concept (every item there is bucketed,
@@ -342,6 +367,15 @@
         el.textContent = name ? 'Привет, ' + name : 'Привет!';
     }
 
+    function updateProfileScreen() {
+        const name = document.getElementById('profileName');
+        const id = document.getElementById('profileId');
+        const area = document.getElementById('profileArea');
+        if (name) name.textContent = state.fullName || 'Сотрудник';
+        if (id) id.textContent = state.employeeId ? 'ID ' + state.employeeId : 'ID —';
+        if (area) area.textContent = state.area ? 'Участок: ' + state.area : 'Участок не выбран';
+    }
+
     function pushSupported() {
         return 'serviceWorker' in navigator
             && 'PushManager' in window
@@ -579,6 +613,7 @@
             updateAreaPills();
             updateShiftHeaders();
             updateHomeGreeting();
+            updateProfileScreen();
             showScreen(state.pendingScreen);
             if (state.pendingScreen === 'screenViolations') void loadWeeklyViolators(true);
         }
@@ -601,6 +636,16 @@
     document.getElementById('openViolationsBtn').addEventListener('click', () => openProtectedScreen('screenViolations'));
     document.getElementById('openPassesBtn').addEventListener('click', () => openProtectedScreen('screenPasses'));
     document.getElementById('pushSetupBtn').addEventListener('click', () => { void enableOrTestPush(); });
+    document.querySelectorAll('[data-mobile-tab]').forEach((button) => {
+        button.addEventListener('click', () => {
+            const tab = button.dataset.mobileTab;
+            stopQrScan();
+            stopCloseQrScan();
+            if (tab === 'home') openHome();
+            else if (tab === 'violations') openProtectedScreen('screenViolations');
+            else if (tab === 'profile') openProtectedScreen('screenProfile');
+        });
+    });
     document.querySelectorAll('.js-home').forEach((button) => button.addEventListener('click', openHome));
     document.getElementById('backHomeFromEntryBtn').addEventListener('click', openHome);
 
@@ -819,6 +864,11 @@
         });
     });
     document.getElementById('logoutBtn').addEventListener('click', () => { void signOut(); });
+    document.getElementById('profileLogoutBtn').addEventListener('click', () => { void signOut(); });
+    document.getElementById('profileChangeAreaBtn').addEventListener('click', () => {
+        state.pendingScreen = 'screenProfile';
+        showScreen('screenArea');
+    });
 
     // ---------- Area pill (pencil) on wizard screens ----------
     [

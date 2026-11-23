@@ -45,7 +45,7 @@
            (top 14px + 38px height = 52px) and the area pill (top 14px +
            ~32px = 46px); row 2 is the shift header (top 58px + ~15px =
            73px). 85px leaves ~12px of breathing room below the lower row. */
-        padding: calc(85px + env(safe-area-inset-top)) 20px 24px 20px;
+        padding: calc(85px + env(safe-area-inset-top)) 20px calc(92px + env(safe-area-inset-bottom)) 20px;
         position: fixed;
         inset: 0;
         overflow: hidden;
@@ -214,7 +214,7 @@
 
     .shift-counter {
         position: fixed;
-        bottom: calc(14px + env(safe-area-inset-bottom));
+        bottom: calc(82px + env(safe-area-inset-bottom));
         left: 50%;
         transform: translateX(-50%);
         font-size: 12px;
@@ -360,6 +360,71 @@
     .home-push-btn { min-height: 66px; }
     .home-push-status { min-height: 18px; margin: 10px 2px 0; color: rgba(36,32,56,.62); font-size: 12px; font-weight: 650; line-height: 1.35; }
     .home-push-status.is-error { color: var(--danger); }
+    .profile-card { text-align: center; }
+    .profile-avatar {
+        width: 68px;
+        height: 68px;
+        display: grid;
+        place-items: center;
+        margin: 0 auto 14px;
+        border-radius: 24px;
+        background: #eee9ff;
+        color: var(--accent);
+        font-size: 28px;
+        font-weight: 900;
+    }
+    .profile-card h1 { margin-bottom: 4px; }
+    .profile-id { margin: 0 0 22px; color: rgba(36,32,56,.6); font-size: 13px; font-weight: 700; }
+    .profile-area { margin: 0 0 12px; padding: 11px 13px; border-radius: 12px; background: #f7f5ff; color: rgba(36,32,56,.72); font-size: 13px; font-weight: 700; }
+    .profile-card .secondary-btn { text-align: center; }
+
+    .mobile-tabbar {
+        position: fixed;
+        left: 50%;
+        bottom: calc(12px + env(safe-area-inset-bottom));
+        transform: translateX(-50%);
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        width: min(calc(100% - 28px), 420px);
+        padding: 5px;
+        border: 1px solid rgba(36,32,56,.1);
+        border-radius: 22px;
+        background: rgba(255,255,255,.9);
+        box-shadow: 0 12px 30px rgba(56,42,115,.18);
+        backdrop-filter: blur(18px) saturate(1.35);
+        z-index: 30;
+    }
+    .mobile-tabbar[hidden] { display: none; }
+    .mobile-tab-thumb {
+        position: absolute;
+        inset: 5px auto 5px 5px;
+        width: calc((100% - 10px) / 3);
+        border-radius: 17px;
+        background: #eee9ff;
+        box-shadow: 0 3px 10px rgba(98,60,234,.16);
+        transform: translateX(calc(var(--tab-index, 0) * 100%));
+        transition: transform 280ms cubic-bezier(.2,.85,.25,1);
+        pointer-events: none;
+    }
+    .mobile-tab {
+        position: relative;
+        z-index: 1;
+        display: grid;
+        place-items: center;
+        gap: 2px;
+        min-width: 0;
+        min-height: 52px;
+        border: 0;
+        border-radius: 17px;
+        background: transparent;
+        color: rgba(36,32,56,.55);
+        font: inherit;
+        cursor: pointer;
+    }
+    .mobile-tab-icon { font-size: 18px; line-height: 1; transition: transform 280ms cubic-bezier(.2,.85,.25,1), color 180ms ease; }
+    .mobile-tab-label { font-size: 11px; font-weight: 750; transition: color 180ms ease; }
+    .mobile-tab.is-active { color: var(--accent); }
+    .mobile-tab.is-active .mobile-tab-icon { transform: translateY(-1px) scale(1.08); }
     .home-menu-icon {
         flex: 0 0 46px;
         width: 46px;
@@ -423,7 +488,8 @@
     .employee-violations-table tr:last-child td { border-bottom: 0; }
 
     @media (max-height: 700px) {
-        .screen { padding-top: calc(78px + env(safe-area-inset-top)); padding-bottom: 16px; }
+        .screen { padding-top: calc(78px + env(safe-area-inset-top)); padding-bottom: calc(84px + env(safe-area-inset-bottom)); }
+        .auth-screen { padding: 20px; }
         .screen-card { padding: 20px; }
         .home-brand { margin-bottom: 18px; }
         .home-menu { gap: 9px; }
@@ -450,6 +516,19 @@
 <body>
 
 <input type="text" name="c_addr_2" id="c_addr_2" class="honeypot" autocomplete="off" tabindex="-1" aria-hidden="true">
+
+<nav id="mobileTabbar" class="mobile-tabbar" aria-label="Основная навигация" hidden>
+    <span id="mobileTabThumb" class="mobile-tab-thumb" aria-hidden="true"></span>
+    <button class="mobile-tab is-active" type="button" data-mobile-tab="home" aria-current="page">
+        <span class="mobile-tab-icon" aria-hidden="true">⌂</span><span class="mobile-tab-label">Главная</span>
+    </button>
+    <button class="mobile-tab" type="button" data-mobile-tab="violations">
+        <span class="mobile-tab-icon" aria-hidden="true">⚠</span><span class="mobile-tab-label">Нарушения</span>
+    </button>
+    <button class="mobile-tab" type="button" data-mobile-tab="profile">
+        <span class="mobile-tab-icon" aria-hidden="true">◉</span><span class="mobile-tab-label">Профиль</span>
+    </button>
+</nav>
 
 <section id="screenAuth" class="screen auth-screen">
     <div class="screen-card auth-card">
@@ -495,6 +574,17 @@
             </button>
         </div>
         <div id="pushStatus" class="home-push-status" role="status" aria-live="polite"></div>
+    </div>
+</section>
+
+<section id="screenProfile" class="screen">
+    <div class="screen-card profile-card">
+        <div class="profile-avatar" aria-hidden="true">W+</div>
+        <h1 id="profileName">Сотрудник</h1>
+        <p id="profileId" class="profile-id">ID —</p>
+        <p id="profileArea" class="profile-area">Участок не выбран</p>
+        <button id="profileChangeAreaBtn" class="secondary-btn" type="button">Сменить участок</button>
+        <button id="profileLogoutBtn" class="secondary-btn" type="button">Выйти из аккаунта</button>
     </div>
 </section>
 
