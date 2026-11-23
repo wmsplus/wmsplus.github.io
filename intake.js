@@ -199,6 +199,14 @@
         return 'Короб смены';
     }
 
+    function createIntakePhotoPath(extension) {
+        const authUid = state.user?.authUid;
+        if (!authUid) throw new Error('Сессия сотрудника не найдена. Войдите заново.');
+        // Storage RLS accepts only the current authenticated user's folder.
+        // The UUID filename keeps a direct public photo URL unguessable.
+        return authUid + '/' + Date.now() + '-' + crypto.randomUUID() + '.' + extension;
+    }
+
     let photoBackTarget = 'screenCategory';
     let qrStream = null;
     let qrAnimFrame = null;
@@ -1113,7 +1121,7 @@
                 return;
             }
             const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
-            const photoPath = Date.now() + '-' + crypto.randomUUID() + '.' + ext;
+            const photoPath = createIntakePhotoPath(ext);
 
             await withRetry(3, 'Загрузка фото', (m) => { photoMsg.textContent = m; }, async () => {
                 photoMsg.textContent = 'Загрузка фото...';
@@ -1773,7 +1781,7 @@
             throw new Error('Фото слишком большое (максимум 8 МБ).');
         }
         const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
-        const path = Date.now() + '-' + crypto.randomUUID() + '.' + ext;
+        const path = createIntakePhotoPath(ext);
         await withRetry(3, 'Загрузка фото', onStatus, async () => {
             onStatus('Загрузка фото...');
             const { error } = await supabaseClient.storage
