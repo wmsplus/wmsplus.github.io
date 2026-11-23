@@ -497,7 +497,9 @@
     .notifications-card > p { margin: 4px 0 20px; color: rgba(36,32,56,.62); font-size: 14px; line-height: 1.4; }
     #screenNotificationInbox {
         justify-content: flex-start;
-        padding-top: calc(68px + env(safe-area-inset-top));
+        /* The back control floats over the card's top-right corner, matching
+           the bell placement on dashboard screens instead of reserving a row. */
+        padding-top: calc(20px + env(safe-area-inset-top));
         padding-bottom: calc(82px + env(safe-area-inset-bottom));
     }
     #screenNotificationInbox .inbox-card {
