@@ -324,6 +324,68 @@
         max-width: 420px;
         text-align: left;
     }
+    .home-bento-heading { margin: 0 0 18px; }
+    .home-bento-heading h1 { margin: 0; font-size: clamp(25px, 7vw, 31px); letter-spacing: -.04em; text-align: left; }
+    .home-bento-heading p { margin: 5px 0 0; color: rgba(36,32,56,.58); font-size: 12px; font-weight: 700; }
+    .home-bento-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .home-bento-tile {
+        min-height: 118px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        padding: 15px;
+        border: 1px solid rgba(36,32,56,.09);
+        border-radius: 22px;
+        background: rgba(255,255,255,.88);
+        box-shadow: 0 9px 24px rgba(66,46,123,.08);
+    }
+    .home-bento-tile-label { color: rgba(36,32,56,.56); font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+    .home-bento-tile-value { color: var(--muted); font-size: 21px; font-weight: 900; line-height: 1.05; letter-spacing: -.035em; overflow-wrap: anywhere; }
+    .home-bento-shift .home-bento-tile-value { font-size: 16px; line-height: 1.15; }
+    .home-bento-action {
+        grid-column: 1 / -1;
+        min-height: 178px;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        gap: 7px;
+        padding: 22px;
+        border: 0;
+        border-radius: 24px;
+        background: linear-gradient(145deg, #714df0, #4f2cc6);
+        color: #fff;
+        box-shadow: 0 16px 30px rgba(82,48,202,.3);
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+        overflow: hidden;
+        position: relative;
+    }
+    .home-bento-action::before { content: '📦'; position: absolute; top: 18px; right: 20px; font-size: 42px; filter: drop-shadow(0 8px 10px rgba(0,0,0,.15)); }
+    .home-bento-action:active { transform: scale(.985); }
+    .home-bento-action-title { font-size: 25px; font-weight: 900; letter-spacing: -.035em; }
+    .home-bento-action-note { color: rgba(255,255,255,.78); font-size: 13px; font-weight: 650; }
+    .home-bento-passes {
+        grid-column: 1 / -1;
+        min-height: 82px;
+        display: flex;
+        align-items: center;
+        gap: 13px;
+        padding: 16px 18px;
+        border: 1px solid rgba(36,32,56,.09);
+        border-radius: 20px;
+        background: rgba(255,255,255,.88);
+        color: var(--muted);
+        box-shadow: 0 9px 24px rgba(66,46,123,.08);
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+    }
+    .home-bento-passes:active { background: #fff; transform: scale(.985); }
+    .home-bento-passes-icon { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 14px; background: #eee9ff; font-size: 22px; }
+    .home-bento-passes strong { display: block; font-size: 16px; }
+    .home-bento-passes small { display: block; margin-top: 3px; color: rgba(36,32,56,.57); font-size: 12px; font-weight: 650; }
+    .home-bento-passes-arrow { margin-left: auto; color: var(--accent); font-size: 26px; line-height: 1; }
     .home-brand {
         display: flex;
         align-items: center;
@@ -468,7 +530,7 @@
     .placeholder-card { text-align: center; }
     .placeholder-icon { font-size: 42px; line-height: 1; margin-bottom: 14px; }
     #screenViolations .violators-card {
-        height: min(470px, 100%);
+        height: min(620px, 100%);
         display: flex;
         flex-direction: column;
         text-align: left;
@@ -560,6 +622,12 @@
         .screen { padding-top: calc(78px + env(safe-area-inset-top)); padding-bottom: calc(84px + env(safe-area-inset-bottom)); }
         .auth-screen { padding: 20px; }
         .screen-card { padding: 20px; }
+        .home-bento-heading { margin-bottom: 12px; }
+        .home-bento-tile { min-height: 96px; padding: 13px; }
+        .home-bento-action { min-height: 142px; padding: 18px; }
+        .home-bento-action::before { top: 14px; right: 17px; font-size: 35px; }
+        .home-bento-action-title { font-size: 22px; }
+        .home-bento-passes { min-height: 70px; padding: 13px 16px; }
         .home-brand { margin-bottom: 18px; }
         .home-menu { gap: 9px; }
         .home-menu-btn { min-height: 68px; }
@@ -621,24 +689,28 @@
 </section>
 
 <section id="screenHome" class="screen home-screen">
-    <div id="areaPillHome" class="area-pill home-area-pill"><span id="areaPillHomeText"></span></div>
-    <div id="shiftHeaderHome" class="shift-header"></div>
     <div class="home-card">
-        <div class="home-brand">
-            <div class="home-brand-mark">W+</div>
-            <div>
-                <h1 id="homeGreeting">Привет!</h1>
-                <p>СЦ Нижний Новгород Ларина</p>
-            </div>
+        <div class="home-bento-heading">
+            <h1 id="homeGreeting">Привет!</h1>
+            <p>СЦ Нижний Новгород Ларина</p>
         </div>
-        <div class="home-menu">
-            <button id="openProblemItemBtn" class="home-menu-btn" type="button">
-                <span class="home-menu-icon">📦</span>
-                <span class="home-menu-copy"><span class="home-menu-title">Проблемный товар</span><span class="home-menu-note">Без ШК, 2 ШК и пустая упаковка</span></span>
+        <div class="home-bento-grid">
+            <div class="home-bento-tile">
+                <span class="home-bento-tile-label">Участок</span>
+                <span id="areaPillHomeText" class="home-bento-tile-value">—</span>
+            </div>
+            <div class="home-bento-tile home-bento-shift">
+                <span class="home-bento-tile-label">Смена</span>
+                <span id="shiftHeaderHome" class="home-bento-tile-value">—</span>
+            </div>
+            <button id="openProblemItemBtn" class="home-bento-action" type="button">
+                <span class="home-bento-action-title">Проблемный товар</span>
+                <span class="home-bento-action-note">Без ШК, 2 ШК и пустая упаковка</span>
             </button>
-            <button id="openPassesBtn" class="home-menu-btn" type="button">
-                <span class="home-menu-icon">🪪</span>
-                <span class="home-menu-copy"><span class="home-menu-title">Печать пропусков</span><span class="home-menu-note">Подготовка пропуска сотрудника</span></span>
+            <button id="openPassesBtn" class="home-bento-passes" type="button">
+                <span class="home-bento-passes-icon" aria-hidden="true">🪪</span>
+                <span><strong>Печать пропусков</strong><small>Подготовка пропуска сотрудника</small></span>
+                <span class="home-bento-passes-arrow" aria-hidden="true">›</span>
             </button>
         </div>
     </div>
