@@ -37,9 +37,12 @@
         { name: 'Другое', emoji: '🧩' },
     ];
 
-    const LS_EMPLOYEE_ID = 'wmsplus_intake_employee_id';
-    const LS_FULL_NAME = 'wmsplus_intake_full_name';
+    // The desktop WMS+ uses Supabase Auth plus a public.users profile.  The
+    // mobile app intentionally keeps only a harmless profile cache locally;
+    // permission is always backed by the live Supabase session.
+    const LS_MOBILE_USER = 'wmsplus_mobile_auth_user';
     const LS_AREA = 'wmsplus_intake_area';
+    const MANAGEMENT_ACCESS_CODE = 'extended_menu';
 
     const screens = Array.from(document.querySelectorAll('.screen'));
     function showScreen(id) {
@@ -57,7 +60,7 @@
     async function refreshShiftCounter() {
         const els = document.querySelectorAll('[data-shift-counter]');
         if (!els.length) return;
-        if (!state.area || state.area === 'Упаковка') {
+        if (!state.user || !state.area || state.area === 'Упаковка') {
             els.forEach((el) => { el.style.display = 'none'; });
             return;
         }
@@ -131,8 +134,10 @@
     }
 
     const state = {
-        employeeId: localStorage.getItem(LS_EMPLOYEE_ID),
-        fullName: localStorage.getItem(LS_FULL_NAME),
+        user: null,
+        employeeId: null,
+        fullName: null,
+        accesses: [],
         area: localStorage.getItem(LS_AREA),
         itemType: null,
         category: null,
@@ -337,10 +342,140 @@
         el.textContent = name ? 'Привет, ' + name : 'Привет!';
     }
 
+    function normalizeAccesses(accesses) {
+        if (Array.isArray(accesses)) {
+            return accesses.map((access) => String(access || '').trim()).filter(Boolean);
+        }
+        return String(accesses || '')
+            .split(',')
+            .map((access) => access.trim())
+            .filter(Boolean);
+    }
+
+    function applyProfile(profile) {
+        const mobileUser = {
+            id: String(profile.id || '').trim(),
+            fio: String(profile.fio || profile.name || '').trim(),
+            accesses: normalizeAccesses(profile.accesses),
+            authUid: String(profile.auth_uid || '').trim(),
+        };
+        state.user = mobileUser;
+        state.employeeId = mobileUser.id;
+        state.fullName = mobileUser.fio;
+        state.accesses = mobileUser.accesses;
+        localStorage.setItem(LS_MOBILE_USER, JSON.stringify(mobileUser));
+    }
+
+    function clearProfile() {
+        localStorage.removeItem(LS_MOBILE_USER);
+        localStorage.removeItem(LS_AREA);
+        // Remove the pre-auth identity cache too, so an older installation
+        // cannot accidentally display the previous employee after upgrade.
+        localStorage.removeItem('wmsplus_intake_employee_id');
+        localStorage.removeItem('wmsplus_intake_full_name');
+        state.user = null;
+        state.employeeId = null;
+        state.fullName = null;
+        state.accesses = [];
+        state.area = null;
+    }
+
+    function hasManagementAccess() {
+        return state.accesses.includes(MANAGEMENT_ACCESS_CODE);
+    }
+
+    function screenRequiresManagementAccess(screenId) {
+        return screenId === 'screenViolations' || screenId === 'screenPasses';
+    }
+
+    function applyRoleAccess() {
+        const hasManagement = hasManagementAccess();
+        const violations = document.getElementById('openViolationsBtn');
+        const passes = document.getElementById('openPassesBtn');
+        if (violations) violations.hidden = !hasManagement;
+        if (passes) passes.hidden = !hasManagement;
+    }
+
+    async function loadProfileForSession(session) {
+        const { data, error } = await supabaseClient
+            .from('users')
+            .select('id,fio,accesses,auth_uid')
+            .eq('auth_uid', session.user.id)
+            .maybeSingle();
+        if (error) throw error;
+        if (!data || !String(data.id || '').trim()) {
+            throw new Error('Профиль сотрудника не найден');
+        }
+        applyProfile(data);
+        applyRoleAccess();
+    }
+
+    function setAuthMessage(message, isError) {
+        const target = document.getElementById('authMsg');
+        target.textContent = message || '';
+        target.className = isError ? 'msg is-error' : 'msg';
+    }
+
+    async function showAuthenticatedStart() {
+        if (!state.user) {
+            showScreen('screenAuth');
+            return;
+        }
+        if (!state.area) {
+            showScreen('screenArea');
+            return;
+        }
+        openProtectedScreen(state.pendingScreen || 'screenHome');
+    }
+
+    async function submitAuth() {
+        const idInput = document.getElementById('authIdInput');
+        const passwordInput = document.getElementById('authPasswordInput');
+        const submit = document.getElementById('authSubmitBtn');
+        const id = idInput.value.trim();
+        const password = passwordInput.value;
+        if (!/^\d+$/.test(id) || !password) {
+            setAuthMessage('Введите ID цифрами и пароль.', true);
+            return;
+        }
+        submit.disabled = true;
+        setAuthMessage('Проверяю доступ…');
+        try {
+            const { data, error } = await supabaseClient.auth.signInWithPassword({
+                email: id + '@wms.internal',
+                password,
+            });
+            if (error || !data?.session) throw new Error('Неверный ID или пароль');
+            await loadProfileForSession(data.session);
+            passwordInput.value = '';
+            setAuthMessage('');
+            await showAuthenticatedStart();
+        } catch (error) {
+            await supabaseClient.auth.signOut();
+            clearProfile();
+            setAuthMessage(error?.message === 'Неверный ID или пароль'
+                ? error.message
+                : 'Не удалось загрузить профиль. Обратитесь к старшему смены.', true);
+        } finally {
+            submit.disabled = false;
+        }
+    }
+
+    async function signOut() {
+        await supabaseClient.auth.signOut();
+        clearProfile();
+        document.getElementById('authPasswordInput').value = '';
+        setAuthMessage('');
+        showScreen('screenAuth');
+    }
+
     function openProtectedScreen(screenId) {
         state.pendingScreen = screenId || 'screenHome';
-        if (!state.employeeId || !state.fullName) {
-            showScreen('screenId');
+        if (!state.user || !state.employeeId || !state.fullName) {
+            showScreen('screenAuth');
+        } else if (screenRequiresManagementAccess(state.pendingScreen) && !hasManagementAccess()) {
+            state.pendingScreen = 'screenHome';
+            showScreen('screenHome');
         } else if (!state.area) {
             showScreen('screenArea');
         } else {
@@ -564,43 +699,14 @@
         renderWeeklyViolators();
     });
 
-    // ---------- Screen: ID ----------
-    const idInput = document.getElementById('idInput');
-    const idMsg = document.getElementById('idMsg');
-    function submitId() {
-        const val = idInput.value.trim();
-        if (!val || Number(val) <= 0) {
-            idMsg.textContent = 'Введите корректный ID.';
-            idMsg.className = 'msg is-error';
-            return;
-        }
-        state.employeeId = val;
-        localStorage.setItem(LS_EMPLOYEE_ID, val);
-        idMsg.textContent = '';
-        idMsg.className = 'msg';
-        showScreen('screenName');
-    }
-    document.getElementById('idNextBtn').addEventListener('click', submitId);
-    idInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitId(); });
-
-    // ---------- Screen: full name ----------
-    const nameInput = document.getElementById('nameInput');
-    const nameMsg = document.getElementById('nameMsg');
-    function submitName() {
-        const val = nameInput.value.trim();
-        if (!val) {
-            nameMsg.textContent = 'Введите ФИО.';
-            nameMsg.className = 'msg is-error';
-            return;
-        }
-        state.fullName = val;
-        localStorage.setItem(LS_FULL_NAME, val);
-        nameMsg.textContent = '';
-        nameMsg.className = 'msg';
-        openProtectedScreen(state.pendingScreen);
-    }
-    document.getElementById('nameNextBtn').addEventListener('click', submitName);
-    nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitName(); });
+    // ---------- Screen: Auth ----------
+    document.getElementById('authSubmitBtn').addEventListener('click', () => { void submitAuth(); });
+    document.getElementById('authIdInput').addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') document.getElementById('authPasswordInput').focus();
+    });
+    document.getElementById('authPasswordInput').addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') void submitAuth();
+    });
 
     // ---------- Screen: area ----------
     // Selected via [data-area] (not the shared .area-btn class, which is
@@ -614,18 +720,7 @@
             openProtectedScreen(state.pendingScreen);
         });
     });
-    document.getElementById('changeUserBtn').addEventListener('click', () => {
-        localStorage.removeItem(LS_EMPLOYEE_ID);
-        localStorage.removeItem(LS_FULL_NAME);
-        localStorage.removeItem(LS_AREA);
-        state.employeeId = null;
-        state.fullName = null;
-        state.area = null;
-        state.pendingScreen = 'screenHome';
-        idInput.value = '';
-        nameInput.value = '';
-        showScreen('screenId');
-    });
+    document.getElementById('logoutBtn').addEventListener('click', () => { void signOut(); });
 
     // ---------- Area pill (pencil) on wizard screens ----------
     [
@@ -1653,11 +1748,35 @@
 
     setInterval(updateShiftHeaders, 60000);
 
-    if (window.location.hash === '#violations') {
-        openProtectedScreen('screenViolations');
-    } else if (window.location.hash === '#passes') {
-        openProtectedScreen('screenPasses');
-    } else {
-        openHome();
+    async function bootstrapAuth() {
+        state.pendingScreen = window.location.hash === '#violations'
+            ? 'screenViolations'
+            : window.location.hash === '#passes'
+                ? 'screenPasses'
+                : 'screenHome';
+        showScreen('screenAuth');
+        try {
+            const { data: sessionData } = await supabaseClient.auth.getSession();
+            if (!sessionData?.session) {
+                clearProfile();
+                return;
+            }
+            await loadProfileForSession(sessionData.session);
+            await showAuthenticatedStart();
+        } catch (error) {
+            console.warn('mobile auth bootstrap failed:', error);
+            await supabaseClient.auth.signOut();
+            clearProfile();
+            setAuthMessage('Сессия завершена. Войдите снова.', true);
+        }
     }
+
+    supabaseClient.auth.onAuthStateChange((event) => {
+        if (event === 'SIGNED_OUT') {
+            clearProfile();
+            showScreen('screenAuth');
+        }
+    });
+
+    void bootstrapAuth();
 })();

@@ -123,6 +123,24 @@
     .secondary-btn:disabled { opacity: .6; cursor: default; }
     .msg { margin-top: 12px; font-size: 13px; font-weight: 600; text-align: center; min-height: 18px; }
     .msg.is-error { color: var(--danger); }
+    .auth-screen { padding: 24px 20px; }
+    .auth-card { text-align: center; }
+    .auth-mark {
+        width: 58px;
+        height: 58px;
+        display: grid;
+        place-items: center;
+        margin: 0 auto 18px;
+        border-radius: 18px;
+        background: var(--accent);
+        color: #fff;
+        font-size: 24px;
+        font-weight: 900;
+        box-shadow: 0 14px 28px rgba(98,60,234,.26);
+    }
+    .auth-card h1 { margin-bottom: 8px; }
+    .auth-card p { margin: 0 0 20px; color: rgba(36,32,56,.62); font-size: 14px; line-height: 1.4; }
+    .auth-fields { display: grid; gap: 10px; }
 
     .area-btn {
         width: 100%;
@@ -430,6 +448,20 @@
 
 <input type="text" name="c_addr_2" id="c_addr_2" class="honeypot" autocomplete="off" tabindex="-1" aria-hidden="true">
 
+<section id="screenAuth" class="screen auth-screen">
+    <div class="screen-card auth-card">
+        <div class="auth-mark">W+</div>
+        <h1>Вход в WMS+</h1>
+        <p>Используйте тот же ID и пароль, что в рабочей системе.</p>
+        <div class="auth-fields">
+            <input id="authIdInput" class="field" type="text" inputmode="numeric" autocomplete="username" maxlength="32" placeholder="Табельный номер" aria-label="Табельный номер">
+            <input id="authPasswordInput" class="field" type="password" autocomplete="current-password" placeholder="Пароль" aria-label="Пароль">
+        </div>
+        <button id="authSubmitBtn" class="primary-btn" type="button">Войти</button>
+        <div id="authMsg" class="msg" role="status" aria-live="polite"></div>
+    </div>
+</section>
+
 <section id="screenHome" class="screen home-screen">
     <button id="areaPillHome" class="area-pill home-area-pill" type="button" aria-label="Сменить участок"><span id="areaPillHomeText"></span> ✎</button>
     <div id="shiftHeaderHome" class="shift-header"></div>
@@ -493,31 +525,13 @@
     </div>
 </section>
 
-<section id="screenId" class="screen">
-    <div class="screen-card">
-        <h1>Введите ваш ID</h1>
-        <input id="idInput" class="field" type="number" inputmode="numeric" min="1" placeholder="Табельный номер" aria-label="Табельный номер">
-        <button id="idNextBtn" class="primary-btn" type="button">Далее</button>
-        <div id="idMsg" class="msg"></div>
-    </div>
-</section>
-
-<section id="screenName" class="screen">
-    <div class="screen-card">
-        <h1>Введите ваше ФИО</h1>
-        <input id="nameInput" class="field" type="text" maxlength="200" placeholder="Фамилия Имя Отчество" aria-label="ФИО">
-        <button id="nameNextBtn" class="primary-btn" type="button">Далее</button>
-        <div id="nameMsg" class="msg"></div>
-    </div>
-</section>
-
 <section id="screenArea" class="screen">
     <div class="screen-card" style="text-align:center;">
         <h1>Выберите участок</h1>
         <button class="area-btn" data-area="ХАБ" type="button">ХАБ</button>
         <button class="area-btn" data-area="Упаковка" type="button">Упаковка</button>
         <button class="area-btn" data-area="Маркетплейс" type="button">Маркетплейс</button>
-        <button id="changeUserBtn" class="secondary-btn" type="button">Сменить пользователя</button>
+        <button id="logoutBtn" class="secondary-btn" type="button">Выйти из аккаунта</button>
     </div>
 </section>
 
