@@ -9,6 +9,7 @@
     const SUPABASE_URL = 'https://bgphllmzmlwurfnbagho.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJncGhsbG16bWx3dXJmbmJhZ2hvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI5NTQwNzIsImV4cCI6MjA3ODUzMDA3Mn0.a1_Wbtpbs9P-_UDqwjGqAIjvwK5WbT_M3B7g5BHtR2Q';
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const WEB_PUSH_VAPID_PUBLIC_KEY = 'BBkitRC9ly-XwQuHuxPYppaS4c9GZHUnpzZZevTkZBsTwZJMzhe3JRFtSefk577wQYhywKPLhSHpCUqgBvtNG2g';
 
     const CATEGORIES_SMALL = [
         { name: 'Одежда', emoji: '👕' },
@@ -341,6 +342,111 @@
         el.textContent = name ? 'Привет, ' + name : 'Привет!';
     }
 
+    function pushSupported() {
+        return 'serviceWorker' in navigator
+            && 'PushManager' in window
+            && 'Notification' in window;
+    }
+
+    function setPushStatus(message, isError) {
+        const target = document.getElementById('pushStatus');
+        if (!target) return;
+        target.textContent = message || '';
+        target.className = isError ? 'home-push-status is-error' : 'home-push-status';
+    }
+
+    function updatePushButton(status) {
+        const button = document.getElementById('pushSetupBtn');
+        const title = document.getElementById('pushSetupTitle');
+        const note = document.getElementById('pushSetupNote');
+        if (!button || !title || !note) return;
+        if (!pushSupported()) {
+            button.disabled = true;
+            title.textContent = 'Уведомления не поддерживаются';
+            note.textContent = 'Откройте приложение в современном браузере.';
+            return;
+        }
+        if (status === 'subscribed') {
+            title.textContent = 'Проверить уведомления';
+            note.textContent = 'Уведомления включены на этом устройстве.';
+        } else if (Notification.permission === 'denied') {
+            button.disabled = true;
+            title.textContent = 'Уведомления заблокированы';
+            note.textContent = 'Разрешите их в настройках браузера.';
+        } else {
+            title.textContent = 'Включить уведомления';
+            note.textContent = 'После подключения сразу пришлём тест.';
+        }
+    }
+
+    function base64UrlToUint8Array(value) {
+        const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
+        const padded = normalized + '='.repeat((4 - normalized.length % 4) % 4);
+        const raw = atob(padded);
+        return Uint8Array.from(raw, (character) => character.charCodeAt(0));
+    }
+
+    async function pushRegistration() {
+        const registration = await navigator.serviceWorker.register('./sw.js', { scope: './' });
+        return navigator.serviceWorker.ready || registration;
+    }
+
+    async function refreshPushState() {
+        if (!state.user || !pushSupported()) {
+            updatePushButton();
+            return null;
+        }
+        try {
+            const registration = await pushRegistration();
+            const subscription = await registration.pushManager.getSubscription();
+            updatePushButton(subscription ? 'subscribed' : 'idle');
+            return subscription;
+        } catch (error) {
+            console.warn('push registration check failed:', error);
+            updatePushButton();
+            return null;
+        }
+    }
+
+    async function callPushEndpoint(action, subscription) {
+        const { data, error } = await supabaseClient.functions.invoke('mobile-web-push', {
+            body: { action, ...(subscription ? { subscription } : {}) },
+        });
+        if (error) throw error;
+        if (!data?.ok) throw new Error(data?.error || 'Не удалось выполнить запрос.');
+        return data;
+    }
+
+    async function enableOrTestPush() {
+        const button = document.getElementById('pushSetupBtn');
+        if (!state.user || !pushSupported() || !button) return;
+        button.disabled = true;
+        setPushStatus('Подключаю уведомления…');
+        try {
+            const registration = await pushRegistration();
+            let permission = Notification.permission;
+            if (permission === 'default') permission = await Notification.requestPermission();
+            if (permission !== 'granted') throw new Error('Разрешение на уведомления не получено.');
+            let subscription = await registration.pushManager.getSubscription();
+            if (!subscription) {
+                subscription = await registration.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: base64UrlToUint8Array(WEB_PUSH_VAPID_PUBLIC_KEY),
+                });
+            }
+            await callPushEndpoint('subscribe', subscription.toJSON());
+            await callPushEndpoint('test');
+            updatePushButton('subscribed');
+            setPushStatus('Тестовое уведомление отправлено на это устройство.');
+        } catch (error) {
+            console.warn('push setup failed:', error);
+            setPushStatus(error?.message || 'Не удалось включить уведомления.', true);
+            updatePushButton();
+        } finally {
+            button.disabled = false;
+        }
+    }
+
     function normalizeAccesses(accesses) {
         if (Array.isArray(accesses)) {
             return accesses.map((access) => String(access || '').trim()).filter(Boolean);
@@ -363,6 +469,7 @@
         state.fullName = mobileUser.fio;
         state.accesses = mobileUser.accesses;
         localStorage.setItem(LS_MOBILE_USER, JSON.stringify(mobileUser));
+        void refreshPushState();
     }
 
     function clearProfile() {
@@ -493,6 +600,7 @@
     document.getElementById('openProblemItemBtn').addEventListener('click', goToStart);
     document.getElementById('openViolationsBtn').addEventListener('click', () => openProtectedScreen('screenViolations'));
     document.getElementById('openPassesBtn').addEventListener('click', () => openProtectedScreen('screenPasses'));
+    document.getElementById('pushSetupBtn').addEventListener('click', () => { void enableOrTestPush(); });
     document.querySelectorAll('.js-home').forEach((button) => button.addEventListener('click', openHome));
     document.getElementById('backHomeFromEntryBtn').addEventListener('click', openHome);
 
