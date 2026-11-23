@@ -130,6 +130,9 @@
     }
     .msg { margin-top: 12px; font-size: 13px; font-weight: 600; text-align: center; min-height: 18px; }
     .msg.is-error { color: var(--danger); }
+    .boot-screen { padding: 24px 20px; }
+    .boot-loader { width: min(100%, 320px); display: grid; place-items: center; align-content: center; gap: 13px; color: rgba(36,32,56,.62); font-size: 13px; font-weight: 750; text-align: center; }
+    .boot-loader svg { width: 100%; height: auto; overflow: visible; }
     .auth-screen { padding: 24px 20px; }
     .auth-card { text-align: center; }
     .auth-mark {
@@ -591,9 +594,13 @@
     .violators-title-row .placeholder-icon { margin: 0; font-size: 31px; }
     .violators-title-row h1 { margin: 0; text-align: left; }
     .violators-caption { margin: 0 0 14px; color: rgba(36,32,56,.62); font-size: 13px; line-height: 1.35; }
+    .violators-controls { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 14px; }
     .period-switch { display: inline-flex; margin: 0 0 14px; padding: 3px; border-radius: 999px; background: #eee9ff; }
+    .violators-controls .period-switch { margin: 0; }
     .period-switch button { border: 0; border-radius: 999px; padding: 7px 13px; background: transparent; color: rgba(36,32,56,.62); font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; }
     .period-switch button.is-active { background: #fff; color: var(--accent); box-shadow: 0 2px 8px rgba(36,32,56,.12); }
+    .pinned-employees-btn { flex: 0 0 auto; border: 0; border-radius: 999px; padding: 9px 11px; background: #eee9ff; color: var(--accent); font: inherit; font-size: 12px; font-weight: 850; cursor: pointer; }
+    .pinned-employees-btn:active { transform: scale(.96); background: #e4dcff; }
     .violators-list { display: grid; width: 100%; min-width: 0; gap: 8px; }
     .violator-row {
         width: 100%;
@@ -717,6 +724,8 @@
     .pinned-row strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
     .pinned-row small { display: block; margin-top: 3px; color: rgba(36,32,56,.58); font-size: 11px; font-weight: 700; }
     .pinned-row span:first-child { font-size: 19px; }
+    .pinned-open-count { margin-left: auto; color: var(--danger); font-size: 13px; font-weight: 850; white-space: nowrap; }
+    .pinned-open-count.is-clear { color: #17975b; }
     .talk-dialog { position: fixed; inset: 0; z-index: 60; display: grid; place-items: end center; padding: 20px; background: rgba(25,20,48,.38); backdrop-filter: blur(8px); }
     .talk-dialog[hidden] { display: none; }
     .talk-dialog-card { width: min(100%, 420px); max-height: min(74dvh, 620px); display: flex; flex-direction: column; padding: 22px; border-radius: 24px; background: #fff; box-shadow: 0 22px 56px rgba(25,20,48,.28); }
@@ -787,6 +796,19 @@
     </button>
 </nav>
 
+<section id="screenBoot" class="screen boot-screen is-active" aria-label="Загрузка приложения">
+    <div class="boot-loader" role="status" aria-live="polite">
+        <svg viewBox="0 0 300 132" aria-hidden="true" focusable="false">
+            <defs><linearGradient id="bootLoaderFill" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#623CEA" stop-opacity=".28"/><stop offset="1" stop-color="#623CEA" stop-opacity="0"/></linearGradient></defs>
+            <path class="violators-loader-grid" d="M8 26H292M8 65H292M8 104H292"/>
+            <path class="violators-loader-area" d="M10 93 C38 80 44 48 74 56 S108 104 137 73 S178 28 208 54 S242 95 290 37 L290 118 L10 118Z" style="fill:url(#bootLoaderFill)"/>
+            <path class="violators-loader-line" d="M10 93 C38 80 44 48 74 56 S108 104 137 73 S178 28 208 54 S242 95 290 37"/>
+            <g><circle class="violators-loader-point" cx="10" cy="93" r="4"/><circle class="violators-loader-point" cx="74" cy="56" r="4"/><circle class="violators-loader-point" cx="137" cy="73" r="4"/><circle class="violators-loader-point" cx="208" cy="54" r="4"/><circle class="violators-loader-point" cx="290" cy="37" r="4"/></g>
+        </svg>
+        <span>Проверяем доступ…</span>
+    </div>
+</section>
+
 <section id="screenAuth" class="screen auth-screen">
     <div class="screen-card auth-card">
         <div class="auth-mark">W+</div>
@@ -823,11 +845,6 @@
             <button id="openPassesBtn" class="home-bento-passes" type="button">
                 <span class="home-bento-passes-icon" aria-hidden="true">🪪</span>
                 <span><strong>Печать пропусков</strong><small>Подготовка пропуска сотрудника</small></span>
-                <span class="home-bento-passes-arrow" aria-hidden="true">›</span>
-            </button>
-            <button id="openPinnedEmployeesBtn" class="home-bento-passes" type="button" hidden>
-                <span class="home-bento-passes-icon" aria-hidden="true">📌</span>
-                <span><strong>Мои исполнители</strong><small id="pinnedEmployeesNote">Закреплённые сотрудники</small></span>
                 <span class="home-bento-passes-arrow" aria-hidden="true">›</span>
             </button>
         </div>
@@ -890,9 +907,12 @@
 <section id="screenViolations" class="screen">
     <div class="screen-card violators-card">
         <div class="violators-title-row"><div class="placeholder-icon">⚠️</div><h1>Нарушения</h1></div>
-        <div class="period-switch" role="group" aria-label="Период нарушений">
-            <button class="is-active" type="button" data-violations-period="7">Неделя</button>
-            <button type="button" data-violations-period="30">Месяц</button>
+        <div class="violators-controls">
+            <div class="period-switch" role="group" aria-label="Период нарушений">
+                <button class="is-active" type="button" data-violations-period="7">Неделя</button>
+                <button type="button" data-violations-period="30">Месяц</button>
+            </div>
+            <button id="openPinnedEmployeesBtn" class="pinned-employees-btn" type="button">📌 Мои <span id="pinnedEmployeesCount">0</span></button>
         </div>
         <div class="violators-scroll"><div id="violatorsList" class="violators-list" aria-live="polite"></div></div>
     </div>

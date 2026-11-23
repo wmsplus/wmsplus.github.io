@@ -53,7 +53,7 @@
     }
 
     function mobileTabForScreen(screenId) {
-        if (screenId === 'screenViolations' || screenId === 'screenEmployeeViolations') return 'violations';
+        if (screenId === 'screenViolations' || screenId === 'screenEmployeeViolations' || screenId === 'screenPinnedEmployees') return 'violations';
         if (screenId === 'screenProfile' || screenId === 'screenNotifications' || screenId === 'screenNotificationInbox' || screenId === 'screenPassword') return 'profile';
         if (screenId === 'screenArea' && state.pendingScreen === 'screenProfile') return 'profile';
         return 'home';
@@ -194,6 +194,7 @@
             detailRows: [],
             detailPeriodDays: 7,
             talks: [],
+            talkCount30: 0,
             isPinned: false,
             talkDraft: null,
         },
@@ -723,7 +724,7 @@
     document.getElementById('openProblemItemBtn').addEventListener('click', goToStart);
     document.getElementById('openPassesBtn').addEventListener('click', () => openProtectedScreen('screenPasses'));
     document.getElementById('openPinnedEmployeesBtn').addEventListener('click', () => openProtectedScreen('screenPinnedEmployees'));
-    document.getElementById('backFromPinnedEmployeesBtn').addEventListener('click', () => openProtectedScreen('screenHome'));
+    document.getElementById('backFromPinnedEmployeesBtn').addEventListener('click', () => openProtectedScreen('screenViolations'));
     document.getElementById('pushSetupBtn').addEventListener('click', () => { void enableOrTestPush(); });
     document.getElementById('notificationBellBtn').addEventListener('click', () => {
         const activeScreen = screens.find((screen) => screen.classList.contains('is-active'))?.id;
@@ -937,8 +938,7 @@
         }
         const sum = state.violations.detailRows.reduce((amount, row) => amount + (Number(row.task_price) || 0), 0);
         const newRows = state.violations.detailRows.filter((row) => !isDiscussedViolation(row));
-        const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
-        const talkCount30 = state.violations.talks.filter((talk) => new Date(talk.created_at).getTime() >= thirtyDaysAgo).length;
+        const talkCount30 = state.violations.talkCount30;
         const isRepeatOffender = talkCount30 >= 3 && newRows.length > 0;
         count.textContent = String(state.violations.detailRows.length);
         total.textContent = formatRoubles(sum || person.totalTaskPrice);
@@ -977,6 +977,7 @@
         state.violations.detailError = '';
         state.violations.detailLoading = true;
         state.violations.talks = [];
+        state.violations.talkCount30 = 0;
         state.violations.isPinned = false;
         if (!keepPeriod) state.violations.detailPeriodDays = state.violations.periodDays;
         document.querySelectorAll('[data-employee-period]').forEach((button) => {
@@ -1000,14 +1001,16 @@
                 : query.eq('culprit_employee_id', person.employeeId);
             const [violationsResult, talksResult, pinResult] = await Promise.all([
                 query,
-                supabaseClient.from('wms_mobile_violation_talks').select('created_at,covered_until,summary').eq('employee_id', person.employeeId).order('covered_until', { ascending: false }),
+                supabaseClient.rpc('mobile_employee_violation_follow_up', { p_employee_id: person.employeeId }),
                 supabaseClient.from('wms_mobile_employee_pins').select('employee_id').eq('employee_id', person.employeeId).maybeSingle(),
             ]);
             if (violationsResult.error) throw violationsResult.error;
             if (talksResult.error) throw talksResult.error;
             if (pinResult.error) throw pinResult.error;
             state.violations.detailRows = violationsResult.data || [];
-            state.violations.talks = talksResult.data || [];
+            const followUp = Array.isArray(talksResult.data) ? talksResult.data[0] : null;
+            state.violations.talks = followUp?.covered_until ? [{ covered_until: followUp.covered_until }] : [];
+            state.violations.talkCount30 = Number(followUp?.talk_count_30) || 0;
             state.violations.isPinned = Boolean(pinResult.data);
         } catch (error) {
             state.violations.detailError = 'Не удалось загрузить карточку сотрудника.';
@@ -1021,24 +1024,20 @@
     async function loadPinnedEmployees() {
         if (!state.user) return;
         try {
-            const { data, error } = await supabaseClient
-                .from('wms_mobile_employee_pins')
-                .select('employee_id,employee_name,created_at')
-                .order('created_at', { ascending: false });
+            const { data, error } = await supabaseClient.rpc('mobile_pinned_employees');
             if (error) throw error;
             state.pinnedEmployees = (data || []).map((item) => ({
                 employeeId: String(item.employee_id || '').trim(),
-                fullName: String(item.employee_name || '').trim() || 'ID ' + String(item.employee_id || '').trim(),
+                fullName: String(item.full_name || '').trim() || 'ID ' + String(item.employee_id || '').trim(),
+                openViolationCount: Number(item.open_violation_count) || 0,
             })).filter((item) => item.employeeId);
         } catch (error) {
             console.warn('pinned employees load failed:', error);
             state.pinnedEmployees = [];
         }
         renderPinnedEmployees();
-        const homeButton = document.getElementById('openPinnedEmployeesBtn');
-        const note = document.getElementById('pinnedEmployeesNote');
-        if (homeButton) homeButton.hidden = state.pinnedEmployees.length === 0;
-        if (note) note.textContent = state.pinnedEmployees.length + ' закреплённых';
+        const count = document.getElementById('pinnedEmployeesCount');
+        if (count) count.textContent = String(state.pinnedEmployees.length);
     }
 
     function renderPinnedEmployees() {
@@ -1056,9 +1055,12 @@
             const row = document.createElement('button');
             row.type = 'button';
             row.className = 'pinned-row';
-            row.innerHTML = '<span aria-hidden="true">📌</span><span><strong></strong><small></small></span>';
+            row.innerHTML = '<span aria-hidden="true">📌</span><span><strong></strong><small></small></span><em class="pinned-open-count"></em>';
             row.querySelector('strong').textContent = compactEmployeeName(person.fullName);
             row.querySelector('small').textContent = 'ID ' + person.employeeId;
+            const count = row.querySelector('.pinned-open-count');
+            count.textContent = person.openViolationCount ? person.openViolationCount + ' нар.' : 'Без новых';
+            count.classList.toggle('is-clear', person.openViolationCount === 0);
             row.addEventListener('click', () => { void openEmployeeViolations({ ...person, count: 0, totalTaskPrice: 0 }, false); });
             list.appendChild(row);
         });
@@ -1083,13 +1085,32 @@
         }
     }
 
-    function openTalkDialog() {
+    async function openTalkDialog() {
         const person = state.violations.selected;
         const dialog = document.getElementById('talkDialog');
         const text = document.getElementById('talkDialogText');
         const summary = document.getElementById('talkSummary');
         if (!person || !dialog || !text || !summary) return;
-        const freshRows = state.violations.detailRows.filter((row) => !isDiscussedViolation(row));
+        setEmployeeStatus('Собираю все новые нарушения…');
+        let query = supabaseClient
+            .from('wms_violations')
+            .select('created_at,violation_type,shk,task_price')
+            .order('created_at', { ascending: false })
+            .limit(5000);
+        query = /^\d+$/.test(person.employeeId)
+            ? query.or('culprit_employee_id.eq.' + person.employeeId + ',culprit_name.eq.' + person.employeeId)
+            : query.eq('culprit_employee_id', person.employeeId);
+        let allRows;
+        try {
+            const { data, error } = await query;
+            if (error) throw error;
+            allRows = data || [];
+        } catch (error) {
+            console.warn('all employee violations load failed:', error);
+            setEmployeeStatus('Не удалось загрузить нарушения для беседы.', true);
+            return;
+        }
+        const freshRows = allRows.filter((row) => !isDiscussedViolation(row));
         if (!freshRows.length) {
             setEmployeeStatus('Новых нарушений для беседы нет.');
             return;
@@ -1157,7 +1178,7 @@
         });
     });
     document.getElementById('pinEmployeeBtn').addEventListener('click', () => { void toggleEmployeePin(); });
-    document.getElementById('talkEmployeeBtn').addEventListener('click', openTalkDialog);
+    document.getElementById('talkEmployeeBtn').addEventListener('click', () => { void openTalkDialog(); });
     document.getElementById('cancelTalkBtn').addEventListener('click', closeTalkDialog);
     document.getElementById('confirmTalkBtn').addEventListener('click', () => { void confirmTalk(); });
 
@@ -2229,11 +2250,12 @@
             : window.location.hash === '#passes'
                 ? 'screenPasses'
                 : 'screenHome';
-        showScreen('screenAuth');
+        showScreen('screenBoot');
         try {
             const { data: sessionData } = await supabaseClient.auth.getSession();
             if (!sessionData?.session) {
                 clearProfile();
+                showScreen('screenAuth');
                 return;
             }
             await loadProfileForSession(sessionData.session);
@@ -2243,6 +2265,7 @@
             await supabaseClient.auth.signOut();
             clearProfile();
             setAuthMessage('Сессия завершена. Войдите снова.', true);
+            showScreen('screenAuth');
         }
     }
 
