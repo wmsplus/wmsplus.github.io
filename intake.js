@@ -724,10 +724,23 @@
 
         list.replaceChildren();
         if (state.violations.loading) {
-            const message = document.createElement('div');
-            message.className = 'violators-empty';
-            message.textContent = 'Загружаю нарушения…';
-            list.appendChild(message);
+            const loader = document.createElement('div');
+            loader.className = 'violators-loading';
+            loader.setAttribute('role', 'status');
+            loader.setAttribute('aria-label', 'Загружаю нарушения');
+            // Mirrors the main dashboard's smooth chart reveal while the
+            // mobile list is waiting for a real response.
+            loader.innerHTML = [
+                '<svg viewBox="0 0 300 132" aria-hidden="true" focusable="false">',
+                '<defs><linearGradient id="violatorsLoaderFill" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#623CEA" stop-opacity=".28"/><stop offset="1" stop-color="#623CEA" stop-opacity="0"/></linearGradient></defs>',
+                '<path class="violators-loader-grid" d="M8 26H292M8 65H292M8 104H292"/>',
+                '<path class="violators-loader-area" d="M10 93 C38 80 44 48 74 56 S108 104 137 73 S178 28 208 54 S242 95 290 37 L290 118 L10 118Z"/>',
+                '<path class="violators-loader-line" d="M10 93 C38 80 44 48 74 56 S108 104 137 73 S178 28 208 54 S242 95 290 37"/>',
+                '<g><circle class="violators-loader-point" cx="10" cy="93" r="4"/><circle class="violators-loader-point" cx="74" cy="56" r="4"/><circle class="violators-loader-point" cx="137" cy="73" r="4"/><circle class="violators-loader-point" cx="208" cy="54" r="4"/><circle class="violators-loader-point" cx="290" cy="37" r="4"/></g>',
+                '</svg>',
+                '<span class="violators-loading-caption">Загружаем нарушения…</span>',
+            ].join('');
+            list.appendChild(loader);
             return;
         }
         if (state.violations.error) {
@@ -765,6 +778,7 @@
             count.className = 'violator-count';
             count.textContent = person.count + ' нар.';
             row.append(rank, personWrap, count);
+            row.style.animationDelay = Math.min(index, 7) * 45 + 'ms';
             row.addEventListener('click', () => { void openEmployeeViolations(person); });
             list.appendChild(row);
         });

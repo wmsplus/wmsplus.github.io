@@ -467,6 +467,12 @@
     .home-menu-note { display: block; margin-top: 3px; font-size: 12px; color: rgba(36,32,56,.62); }
     .placeholder-card { text-align: center; }
     .placeholder-icon { font-size: 42px; line-height: 1; margin-bottom: 14px; }
+    #screenViolations .violators-card {
+        height: min(470px, 100%);
+        display: flex;
+        flex-direction: column;
+        text-align: left;
+    }
     .violators-card { text-align: left; }
     .violators-title-row { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 4px; }
     .violators-title-row .placeholder-icon { margin: 0; font-size: 31px; }
@@ -500,7 +506,43 @@
     .violator-id { display: block; margin-top: 2px; color: rgba(36,32,56,.58); font-size: 11px; font-weight: 650; }
     .violator-count { flex: 0 0 auto; color: var(--danger); font-size: 13px; font-weight: 850; }
     .violators-scroll { width: 100%; max-height: min(46dvh, 350px); overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; padding-right: 2px; }
+    #screenViolations .violators-scroll { flex: 1; min-height: 0; max-height: none; }
+    #screenViolations .violators-list { min-height: 100%; }
     .violators-empty { padding: 22px 12px; text-align: center; color: rgba(36,32,56,.62); font-size: 14px; }
+    .violators-loading {
+        height: 100%;
+        min-height: 180px;
+        display: grid;
+        place-items: center;
+        align-content: center;
+        gap: 12px;
+        animation: violators-loader-in 260ms ease-out both;
+    }
+    .violators-loading svg { width: min(100%, 290px); height: auto; overflow: visible; }
+    .violators-loading-caption { color: rgba(36,32,56,.62); font-size: 12px; font-weight: 750; }
+    .violators-loader-grid { stroke: rgba(98,60,234,.13); stroke-width: 1; }
+    .violators-loader-area { fill: url(#violatorsLoaderFill); opacity: .55; animation: violators-area-breathe 1.9s ease-in-out infinite; }
+    .violators-loader-line {
+        fill: none;
+        stroke: var(--accent);
+        stroke-width: 3;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-dasharray: 340;
+        stroke-dashoffset: 340;
+        animation: violators-line-draw 1.55s cubic-bezier(.4,0,.2,1) infinite;
+    }
+    .violators-loader-point { fill: #fff; stroke: var(--accent); stroke-width: 2.5; transform-box: fill-box; transform-origin: center; animation: violators-point-pulse 1.55s ease-in-out infinite; }
+    .violators-loader-point:nth-of-type(2) { animation-delay: .16s; }
+    .violators-loader-point:nth-of-type(3) { animation-delay: .32s; }
+    .violators-loader-point:nth-of-type(4) { animation-delay: .48s; }
+    .violators-loader-point:nth-of-type(5) { animation-delay: .64s; }
+    .violator-row { animation: violator-row-in 300ms cubic-bezier(.2,.85,.25,1) both; }
+    @keyframes violators-loader-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes violators-line-draw { 0% { stroke-dashoffset: 340; opacity: .35; } 42%, 72% { stroke-dashoffset: 0; opacity: 1; } 100% { stroke-dashoffset: -18; opacity: .38; } }
+    @keyframes violators-area-breathe { 0%, 100% { opacity: .3; } 50% { opacity: .76; } }
+    @keyframes violators-point-pulse { 0%, 100% { transform: scale(.78); opacity: .52; } 50% { transform: scale(1.18); opacity: 1; } }
+    @keyframes violator-row-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
     .violators-footer { display: flex; align-items: center; gap: 8px; margin-top: 14px; }
     .violators-footer .secondary-btn { width: auto; min-width: 44px; margin: 0; padding: 9px 12px; }
     .violators-page { flex: 1; text-align: center; color: rgba(36,32,56,.62); font-size: 12px; font-weight: 700; }
@@ -536,6 +578,13 @@
         .screen > *:not(.area-pill):not(.shift-header):not(.back-btn):not(.shift-counter),
         .screen.is-active > *:not(.area-pill):not(.shift-header):not(.back-btn):not(.shift-counter) {
             transition: none;
+        }
+        .violators-loading,
+        .violators-loader-area,
+        .violators-loader-line,
+        .violators-loader-point,
+        .violator-row {
+            animation: none;
         }
     }
 </style>
@@ -601,7 +650,7 @@
         <h1 id="profileName">Сотрудник</h1>
         <p id="profileId" class="profile-id">ID —</p>
         <p id="profileArea" class="profile-area">Участок не выбран</p>
-        <button id="profileChangeAreaBtn" class="secondary-btn" type="button">Сменить участок</button>
+        <button id="profileChangeAreaBtn" class="profile-settings-btn" type="button"><span aria-hidden="true">📍</span><span>Сменить участок</span><span class="settings-chevron" aria-hidden="true">›</span></button>
         <button id="profileNotificationsBtn" class="profile-settings-btn" type="button"><span aria-hidden="true">🔔</span><span>Уведомления</span><span class="settings-chevron" aria-hidden="true">›</span></button>
         <button id="profilePasswordBtn" class="profile-settings-btn" type="button"><span aria-hidden="true">🔐</span><span>Сменить пароль</span><span class="settings-chevron" aria-hidden="true">›</span></button>
         <button id="profileLogoutBtn" class="secondary-btn is-danger" type="button">Выйти из аккаунта</button>
