@@ -72,6 +72,10 @@ window.WmsInventoryModule = (function () {
     const video = document.getElementById("invVideo");
     const canvas = document.getElementById("invCanvas");
     const stepButtons = document.getElementById("stepButtons");
+    const inventoryShelf = document.getElementById("inventoryShelf");
+    const inventoryShelfName = document.getElementById("inventoryShelfName");
+    const inventoryShelfCount = document.getElementById("inventoryShelfCount");
+    const inventoryShelfBoxes = document.getElementById("inventoryShelfBoxes");
 
     let activeSession = null;
     let scanStream = null;
@@ -84,6 +88,8 @@ window.WmsInventoryModule = (function () {
     // retry rather than stuck with two dead buttons.
     let shelfFinishBtn = null;
     let shelfMissingBtn = null;
+    let lastScanErrorAt = 0;
+    let autoAdvancingShelf = false;
 
     // ---------- Reusable camera scanner (shelf codes here, box codes in
     // Task 6, pairing code below) -- mirrors intake.js's
@@ -183,25 +189,56 @@ window.WmsInventoryModule = (function () {
     // real user gesture (tapping "Начать инвентаризацию" etc.), so
       // autoplay-policy audio-unlock is not a concern here.
     let audioCtx = null;
-    function playSuccessSound() {
+    function getAudioContext() {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === "suspended") void audioCtx.resume();
+        return audioCtx;
+    }
+
+    function playNotes(notes, volume) {
         try {
-            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
-            osc.connect(gain);
-            gain.connect(audioCtx.destination);
-            osc.type = "sine";
-            osc.frequency.setValueAtTime(880, audioCtx.currentTime);
-            osc.frequency.exponentialRampToValueAtTime(1320, audioCtx.currentTime + 0.1);
-            gain.gain.setValueAtTime(0.001, audioCtx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.25, audioCtx.currentTime + 0.02);
-            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.18);
-            osc.start();
-            osc.stop(audioCtx.currentTime + 0.2);
+            const context = getAudioContext();
+            const start = context.currentTime + 0.01;
+            notes.forEach((note, index) => {
+                const oscillator = context.createOscillator();
+                const gain = context.createGain();
+                oscillator.connect(gain);
+                gain.connect(context.destination);
+                oscillator.type = note.type || "sine";
+                oscillator.frequency.setValueAtTime(note.frequency, start + note.offset);
+                gain.gain.setValueAtTime(0.001, start + note.offset);
+                gain.gain.exponentialRampToValueAtTime(volume || .26, start + note.offset + .015);
+                gain.gain.exponentialRampToValueAtTime(0.001, start + note.offset + note.duration);
+                oscillator.start(start + note.offset);
+                oscillator.stop(start + note.offset + note.duration + .02);
+            });
         } catch (e) {
-            // Best-effort only -- some browsers/contexts block audio
-            // without a more direct user gesture than we have here.
+            // Sound is an enhancement; the visual confirmation still works.
         }
+    }
+
+    function playSuccessSound() {
+        playNotes([
+            { frequency: 784, offset: 0, duration: .12 },
+            { frequency: 1046, offset: .09, duration: .16 },
+            { frequency: 1568, offset: .18, duration: .18 },
+        ], .34);
+    }
+
+    function playErrorSound() {
+        playNotes([
+            { frequency: 210, offset: 0, duration: .12, type: "square" },
+            { frequency: 155, offset: .11, duration: .18, type: "square" },
+        ], .16);
+    }
+
+    function playCompletionJingle() {
+        playNotes([
+            { frequency: 523, offset: 0, duration: .15 },
+            { frequency: 659, offset: .11, duration: .15 },
+            { frequency: 784, offset: .22, duration: .18 },
+            { frequency: 1046, offset: .36, duration: .32 },
+        ], .3);
     }
 
     // Visible + audible + tactile confirmation that a box was actually
@@ -218,6 +255,74 @@ window.WmsInventoryModule = (function () {
         if (navigator.vibrate) {
             try { navigator.vibrate(80); } catch (e) { /* best-effort only */ }
         }
+    }
+
+    function reportScanError(message) {
+        const now = Date.now();
+        if (now - lastScanErrorAt < 1100) return;
+        lastScanErrorAt = now;
+        const card = document.querySelector(".inventory-card");
+        if (card) {
+            card.classList.remove("is-scan-error");
+            void card.offsetWidth;
+            card.classList.add("is-scan-error");
+        }
+        playErrorSound();
+        if (navigator.vibrate) {
+            try { navigator.vibrate([45, 40, 45]); } catch (e) { /* best-effort only */ }
+        }
+        stepMsg.textContent = message;
+    }
+
+    function hideShelfVisual() {
+        if (inventoryShelf) inventoryShelf.hidden = true;
+        if (inventoryShelfBoxes) inventoryShelfBoxes.replaceChildren();
+    }
+
+    function resetShelfVisual(shelf) {
+        if (!inventoryShelf || !inventoryShelfBoxes) return;
+        inventoryShelf.hidden = false;
+        inventoryShelfName.textContent = "Полка " + (shelf.name || "");
+        inventoryShelfBoxes.replaceChildren();
+        updateShelfVisualCount(0, shelf.capacity || 0);
+    }
+
+    function updateShelfVisualCount(count, capacity) {
+        if (inventoryShelfCount) inventoryShelfCount.textContent = String(count) + " / " + String(capacity);
+    }
+
+    function addBoxToShelfVisual(boxNumber, shelf, isMissingSticker) {
+        if (!inventoryShelfBoxes) return;
+        const box = document.createElement("span");
+        box.className = "inventory-shelf-box" + (isMissingSticker ? " is-missing" : "");
+        box.textContent = isMissingSticker ? "без ШК" : "№" + boxNumber;
+        inventoryShelfBoxes.appendChild(box);
+        inventoryShelfBoxes.scrollLeft = inventoryShelfBoxes.scrollWidth;
+        updateShelfVisualCount(inventoryShelfBoxes.children.length, shelf.capacity || 0);
+    }
+
+    async function restoreShelfVisual(shelf) {
+        resetShelfVisual(shelf);
+        const { data: results, error } = await supabaseClient
+            .from("wms_no_shk_inventory_box_results")
+            .select("box_id,result,scan_order,recorded_at")
+            .eq("session_id", activeSession.id)
+            .eq("shelf_id", shelf.id)
+            .in("result", ["found", "missing_sticker"])
+            .order("scan_order", { ascending: true, nullsFirst: false })
+            .order("recorded_at", { ascending: true });
+        if (error) { console.error("Failed to restore shelf visual", error); return; }
+        const rows = results || [];
+        activeSession.nextScanOrder = rows.reduce((max, row, index) => Math.max(max, Number(row.scan_order) || index + 1), 0) + 1;
+        if (!rows.length) return;
+        const ids = rows.map((row) => row.box_id);
+        const { data: boxes, error: boxesError } = await supabaseClient
+            .from("wms_no_shk_boxes")
+            .select("id,box_number")
+            .in("id", ids);
+        if (boxesError) { console.error("Failed to restore scanned boxes", boxesError); return; }
+        const byId = new Map((boxes || []).map((box) => [box.id, box]));
+        rows.forEach((row) => addBoxToShelfVisual(byId.get(row.box_id)?.box_number || "?", shelf, row.result === "missing_sticker"));
     }
 
     function stopScanner() {
@@ -266,17 +371,21 @@ window.WmsInventoryModule = (function () {
 
     function renderStartScreen() {
         activeSession = null;
+        hideShelfVisual();
         stepTitle.textContent = "Инвентаризация «Без ШК»";
         stepMsg.textContent = "";
         stepButtons.innerHTML = "";
         const startBtn = document.createElement("button");
-        startBtn.className = "btn btn-rect";
+        startBtn.className = "primary-btn inventory-start-btn";
         startBtn.textContent = "Начать инвентаризацию";
         startBtn.addEventListener("click", () => {
             // Disable synchronously so a double-tap can't race two inserts
             // before the first one's unique partial index would reject the
             // second anyway.
             startBtn.disabled = true;
+            // Start the audio context inside the worker's real tap. This is
+            // required by iOS for the later scan/completion sounds.
+            getAudioContext();
             void beginNewSession();
         });
         stepButtons.appendChild(startBtn);
@@ -299,7 +408,8 @@ window.WmsInventoryModule = (function () {
         }
         activeSession = { id: data.id };
         stepTitle.textContent = "Отсканируйте QR на экране";
-        stepMsg.textContent = "Экран, на который выводится инвентаризация";
+        stepMsg.textContent = "Экран в кабинете ОПП";
+        stepButtons.replaceChildren();
         void startScanner(handlePairingScan);
     }
 
@@ -314,7 +424,8 @@ window.WmsInventoryModule = (function () {
         activeSession = { id: session.id, shelfId: session.current_shelf_id || null };
         if (session.step === "pairing") {
             stepTitle.textContent = "Отсканируйте QR на экране";
-            stepMsg.textContent = "Экран, на который выводится инвентаризация";
+            stepMsg.textContent = "Экран в кабинете ОПП";
+            stepButtons.replaceChildren();
             void startScanner(handlePairingScan);
             return;
         }
@@ -365,6 +476,8 @@ window.WmsInventoryModule = (function () {
 
     // ---------- Per-shelf loop ----------
     async function startShelfScan() {
+        hideShelfVisual();
+        autoAdvancingShelf = false;
         stepTitle.textContent = "Отсканируйте полку";
         stepMsg.textContent = "";
         stepButtons.innerHTML = "";
@@ -377,7 +490,7 @@ window.WmsInventoryModule = (function () {
         void startScanner(async (text) => {
             // WMSP.PLCE.WSHK.{rack_number}.{shelf_number}
             const match = /^WMSP\.PLCE\.WSHK\.(\d+)\.(\d+)$/.exec(text);
-            if (!match) return; // not a shelf code, keep scanning
+            if (!match) { reportScanError("Это не QR-код полки"); return; }
             const rackNumber = Number(match[1]);
             const shelfNumber = Number(match[2]);
             const { data: shelfRows, error: shelfError } = await supabaseClient
@@ -389,7 +502,7 @@ window.WmsInventoryModule = (function () {
             if (shelfError) { stepMsg.textContent = "Ошибка: " + shelfError.message; return; }
             const shelf = shelfRows && shelfRows[0];
             if (!shelf) {
-                stepMsg.textContent = "Полка не найдена в системе";
+                reportScanError("Полка не найдена в системе");
                 return;
             }
             stopScanner();
@@ -440,7 +553,7 @@ window.WmsInventoryModule = (function () {
         stepButtons.innerHTML = "";
         const finishLabel = scannedCount === 0 ? "На полке нет коробов" : "На полке больше нет коробов";
         const finishBtn = document.createElement("button");
-        finishBtn.className = "btn btn-rect";
+        finishBtn.className = "secondary-btn inventory-action-btn";
         finishBtn.textContent = finishLabel;
         let missingBtn = null;
         finishBtn.addEventListener("click", () => {
@@ -457,7 +570,7 @@ window.WmsInventoryModule = (function () {
 
         if (scannedCount < shelf.capacity) {
             missingBtn = document.createElement("button");
-            missingBtn.className = "btn btn-outline";
+            missingBtn.className = "secondary-btn inventory-action-btn is-missing";
             missingBtn.textContent = "Короб без наклейки";
             missingBtn.addEventListener("click", () => void openMissingStickerCalendar());
             stepButtons.appendChild(missingBtn);
@@ -485,7 +598,7 @@ window.WmsInventoryModule = (function () {
         const { data: boxRows, error: boxLookupError } = await supabaseClient.from("wms_no_shk_boxes").select("id").eq("box_number", boxNumber).limit(1);
         if (boxLookupError) { stepMsg.textContent = "Ошибка: " + boxLookupError.message; return; }
         const box = boxRows && boxRows[0];
-        if (!box) { stepMsg.textContent = "Короб №" + boxNumber + " не найден"; return; }
+        if (!box) { reportScanError("Короб №" + boxNumber + " не найден в системе"); return; }
 
         const { data: dup, error: dupError } = await supabaseClient
             .from("wms_no_shk_inventory_box_results")
@@ -495,12 +608,14 @@ window.WmsInventoryModule = (function () {
             .eq("box_id", box.id)
             .maybeSingle();
         if (dupError) { stepMsg.textContent = "Ошибка: " + dupError.message; return; }
-        if (dup) { stepMsg.textContent = "Короб №" + boxNumber + " уже отсканирован"; return; }
+        if (dup) { reportScanError("Короб №" + boxNumber + " уже отсканирован"); return; }
+
+        const scanOrder = Number(activeSession.nextScanOrder) || 1;
 
         // Independent writes (different tables, neither depends on the
         // other's result) -- run in parallel rather than sequentially.
         const [{ error: insertError }, { error: boxUpdateError }] = await Promise.all([
-            supabaseClient.from("wms_no_shk_inventory_box_results").insert({ session_id: activeSession.id, shelf_id: shelf.id, box_id: box.id, result: "found" }),
+            supabaseClient.from("wms_no_shk_inventory_box_results").insert({ session_id: activeSession.id, shelf_id: shelf.id, box_id: box.id, result: "found", scan_order: scanOrder }),
             // shortage:false -- a box scanned onto a shelf is by definition
             // no longer missing, even if a PREVIOUS shelf's finishShelf()
             // had flagged it (see finishShelf() below).
@@ -513,6 +628,8 @@ window.WmsInventoryModule = (function () {
         // let scanning resume right away; counter/session housekeeping
         // below runs in the background.
         flashScanSuccess();
+        activeSession.nextScanOrder = scanOrder + 1;
+        addBoxToShelfVisual(boxNumber, shelf, false);
         stepMsg.textContent = "Короб №" + boxNumber + " добавлен (" + shelf.name + ")";
 
         void (async () => {
@@ -522,7 +639,17 @@ window.WmsInventoryModule = (function () {
             ]);
             // Only re-render if we're still on the SAME shelf -- the
             // worker may have already moved on by the time this resolves.
-            if (activeSession.shelfId === shelf.id) renderShelfButtons(newCount || 0, shelf);
+            if (activeSession.shelfId === shelf.id) {
+                const count = newCount || 0;
+                renderShelfButtons(count, shelf);
+                if (count >= shelf.capacity && !autoAdvancingShelf) {
+                    autoAdvancingShelf = true;
+                    stopScanner();
+                    stepButtons.replaceChildren();
+                    stepMsg.textContent = "Полка заполнена. Переходим к следующей…";
+                    setTimeout(() => { void finishShelf(); }, 620);
+                }
+            }
             const [{ error: auditUpdateError }, { error: touchError }] = await Promise.all([
                 supabaseClient.from("wms_no_shk_inventory_shelf_audits").update({ boxes_found_count: foundCount || 0 }).eq("session_id", activeSession.id).eq("shelf_id", shelf.id),
                 supabaseClient.from("wms_no_shk_inventory_sessions").update({ last_activity_at: new Date().toISOString() }).eq("id", activeSession.id),
@@ -535,12 +662,14 @@ window.WmsInventoryModule = (function () {
     async function startBoxScan(shelf, statusMsg) {
         stepTitle.textContent = "Отсканируйте все короба на полке слева направо";
         stepMsg.textContent = statusMsg || shelf.name;
+        autoAdvancingShelf = false;
+        await restoreShelfVisual(shelf);
         const count = await scannedCountForCurrentShelf();
         renderShelfButtons(count, shelf);
 
         void startScanner(async (text) => {
             const match = /^WMSP\.BOX\.(\d+)$/.exec(text);
-            if (!match) return;
+            if (!match) { reportScanError("Это не QR-код короба"); return; }
             await recordFoundBox(Number(match[1]), shelf);
             // keep scanning -- do NOT stop the scanner here, the loop in
             // startScanner already re-arms via requestAnimationFrame for
@@ -578,13 +707,13 @@ window.WmsInventoryModule = (function () {
         // buttons up front, before the worker has chosen a date, invited
         // tapping one before the date field was even touched.
         const dayBtn = document.createElement("button");
-        dayBtn.className = "btn btn-rect";
+        dayBtn.className = "primary-btn inventory-action-btn";
         dayBtn.textContent = "Короб День";
         dayBtn.style.display = "none";
         stepButtons.appendChild(dayBtn);
 
         const nightBtn = document.createElement("button");
-        nightBtn.className = "btn btn-rect";
+        nightBtn.className = "primary-btn inventory-action-btn";
         nightBtn.textContent = "Короб Ночь";
         nightBtn.style.display = "none";
         stepButtons.appendChild(nightBtn);
@@ -609,7 +738,7 @@ window.WmsInventoryModule = (function () {
         nightBtn.addEventListener("click", () => pick("Ночная"));
 
         const backBtn = document.createElement("button");
-        backBtn.className = "btn btn-outline";
+        backBtn.className = "secondary-btn inventory-action-btn";
         backBtn.textContent = "Назад";
         backBtn.addEventListener("click", () => void startBoxScan(activeSession.shelf));
         stepButtons.appendChild(backBtn);
@@ -647,8 +776,18 @@ window.WmsInventoryModule = (function () {
     // scanning resumes; the denormalized counter and session touch run
     // after.
     async function selectMissingStickerBox(box) {
+        const { data: duplicate, error: duplicateError } = await supabaseClient
+            .from("wms_no_shk_inventory_box_results")
+            .select("id")
+            .eq("session_id", activeSession.id)
+            .eq("shelf_id", activeSession.shelfId)
+            .eq("box_id", box.id)
+            .maybeSingle();
+        if (duplicateError) { stepMsg.textContent = "Ошибка: " + duplicateError.message; return; }
+        if (duplicate) { reportScanError("Этот короб уже учтён на полке"); return; }
+        const scanOrder = Number(activeSession.nextScanOrder) || 1;
         const { error: resultInsertError } = await supabaseClient.from("wms_no_shk_inventory_box_results").insert({
-            session_id: activeSession.id, shelf_id: activeSession.shelfId, box_id: box.id, result: "missing_sticker",
+            session_id: activeSession.id, shelf_id: activeSession.shelfId, box_id: box.id, result: "missing_sticker", scan_order: scanOrder,
         });
         if (resultInsertError) { stepMsg.textContent = "Ошибка: " + resultInsertError.message; return; }
         const { error: boxUpdateError } = await supabaseClient.from("wms_no_shk_boxes").update({ shelf_id: activeSession.shelfId, shortage: false }).eq("id", box.id);
@@ -682,6 +821,8 @@ window.WmsInventoryModule = (function () {
         }
 
         flashScanSuccess();
+        activeSession.nextScanOrder = scanOrder + 1;
+        addBoxToShelfVisual(box.box_number, activeSession.shelf, true);
         void startBoxScan(activeSession.shelf, "Стикер короба №" + box.box_number + " поставлен в печать");
 
         void (async () => {
@@ -802,6 +943,14 @@ window.WmsInventoryModule = (function () {
     async function showCompletion() {
         stepButtons.innerHTML = "";
         video.style.display = "none";
+        hideShelfVisual();
+        const card = document.querySelector(".inventory-card");
+        if (card) {
+            card.classList.remove("is-complete");
+            void card.offsetWidth;
+            card.classList.add("is-complete");
+        }
+        playCompletionJingle();
         const { data, error } = await supabaseClient.from("wms_no_shk_inventory_sessions").select("started_at,finished_at").eq("id", activeSession.id).single();
         stepTitle.textContent = "✓ Инвентаризация завершена";
         if (error || !data) {

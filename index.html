@@ -540,6 +540,9 @@
     .inbox-empty { height: 100%; min-height: 160px; display: grid; place-items: center; align-content: center; gap: 9px; color: rgba(36,32,56,.58); font-size: 14px; font-weight: 650; text-align: center; }
     .inbox-empty span { font-size: 35px; }
     .inbox-notification { padding: 14px; border: 1px solid rgba(36,32,56,.11); border-radius: 15px; background: #faf9ff; }
+    .inbox-notification[role="button"] { cursor: pointer; }
+    .inbox-notification[role="button"]:active { transform: scale(.985); background: #f3f0ff; }
+    .inbox-notification[role="button"]:focus-visible { outline: 3px solid rgba(98,60,234,.4); outline-offset: 2px; }
     .inbox-notification + .inbox-notification { margin-top: 9px; }
     .inbox-notification.is-unread { border-color: rgba(98,60,234,.34); background: #f3f0ff; box-shadow: 0 5px 16px rgba(98,60,234,.08); }
     .inbox-notification strong { display: block; color: var(--muted); font-size: 14px; line-height: 1.3; }
@@ -632,11 +635,27 @@
     .pinned-employees-btn { flex: 0 0 auto; border: 0; border-radius: 999px; padding: 9px 11px; background: #eee9ff; color: var(--accent); font: inherit; font-size: 12px; font-weight: 850; cursor: pointer; }
     .pinned-employees-btn:active { transform: scale(.96); background: #e4dcff; }
     .inventory-card { text-align: center; }
+    .inventory-card .inventory-start-btn { margin-top: 0; min-height: 54px; border-radius: 15px; box-shadow: 0 10px 22px rgba(98,60,234,.24); }
+    .inventory-card .inventory-action-btn { margin: 0; min-height: 46px; border-radius: 13px; }
+    .inventory-card .inventory-action-btn.is-missing { border-color: rgba(98,60,234,.28); background: #f5f2ff; color: var(--accent); }
+    .inventory-shelf { display: grid; gap: 8px; margin: 0 auto 14px; padding: 12px; border: 1px solid rgba(98,60,234,.2); border-radius: 16px; background: linear-gradient(135deg, #f8f6ff, #eee9ff); text-align: left; overflow: hidden; }
+    .inventory-shelf[hidden] { display: none; }
+    .inventory-shelf-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 12px; font-weight: 850; }
+    .inventory-shelf-count { color: var(--accent); font-variant-numeric: tabular-nums; }
+    .inventory-shelf-boxes { display: flex; align-items: end; gap: 7px; min-height: 48px; overflow-x: auto; overflow-y: hidden; padding: 4px 2px 2px; scrollbar-width: none; }
+    .inventory-shelf-boxes::-webkit-scrollbar { display: none; }
+    .inventory-shelf-box { flex: 0 0 52px; min-height: 43px; display: grid; place-items: center; padding: 5px; border: 1px solid rgba(36,32,56,.13); border-radius: 9px 9px 4px 4px; background: #fff; color: var(--muted); box-shadow: 0 5px 11px rgba(36,32,56,.1); font-size: 10px; font-weight: 850; animation: inventory-box-arrive .46s cubic-bezier(.18,.88,.28,1.25) both; }
+    .inventory-shelf-box.is-missing { border-style: dashed; color: #956d00; background: #fff9e8; }
+    @keyframes inventory-box-arrive { from { opacity: 0; transform: translateY(-24px) scale(.72) rotate(-4deg); } to { opacity: 1; transform: translateY(0) scale(1) rotate(0); } }
     #scanFrame { display: none; position: relative; width: 100%; max-width: 260px; aspect-ratio: 1 / 1; margin: 0 auto 12px; border-radius: var(--radius-md); overflow: hidden; background: #000; }
     #invVideo { position: absolute; top: 50%; left: 50%; width: 100%; height: 100%; object-fit: cover; transform: translate(-50%, -50%); }
     #scanReticle { position: absolute; inset: 14%; border: 3px solid rgba(255,255,255,.9); border-radius: 14px; box-shadow: 0 0 0 9999px rgba(0,0,0,.32); pointer-events: none; }
     @keyframes box-scan-success { 0% { box-shadow: 0 0 0 0 rgba(34,197,94,.55); } 70% { box-shadow: 0 0 0 22px rgba(34,197,94,0); } 100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); } }
     .inventory-card.is-scan-success { animation: box-scan-success .6s ease-out; }
+    @keyframes box-scan-error { 0%,100% { transform: translateX(0); } 20% { transform: translateX(-8px); } 55% { transform: translateX(7px); } 80% { transform: translateX(-3px); } }
+    .inventory-card.is-scan-error { animation: box-scan-error .38s ease-out; }
+    .inventory-card.is-complete { animation: inventory-complete .85s cubic-bezier(.18,.85,.25,1); }
+    @keyframes inventory-complete { 0% { transform: scale(1); } 40% { transform: scale(1.025); box-shadow: 0 0 0 18px rgba(16,185,129,.13); } 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(16,185,129,0); } }
     .violators-list { display: grid; width: 100%; min-width: 0; gap: 8px; }
     .violator-row {
         width: 100%;
@@ -895,7 +914,7 @@
             </button>
             <button id="openInventoryBtn" class="home-bento-inventory" type="button">
                 <span class="home-bento-inventory-icon" aria-hidden="true">📋</span>
-                <span><strong>Инвентаризация</strong><small>Проверка коробов «Без ШК» по полкам</small></span>
+                <span><strong>Инвентаризация «Без ШК»</strong><small>Проверка коробов по полкам</small></span>
                 <span class="home-bento-inventory-arrow" aria-hidden="true">›</span>
             </button>
         </div>
@@ -1013,6 +1032,10 @@
     <div class="screen-card inventory-card">
         <h1 id="stepTitle">Инвентаризация «Без ШК»</h1>
         <p id="stepMsg" style="margin:0 0 16px;font-size:14px;color:#64748b;"></p>
+        <div id="inventoryShelf" class="inventory-shelf" hidden>
+            <div class="inventory-shelf-head"><span id="inventoryShelfName">Полка</span><span id="inventoryShelfCount" class="inventory-shelf-count">0 / 0</span></div>
+            <div id="inventoryShelfBoxes" class="inventory-shelf-boxes" aria-label="Короба на полке"></div>
+        </div>
         <div id="scanFrame">
             <video id="invVideo" playsinline muted></video>
             <div id="scanReticle"></div>

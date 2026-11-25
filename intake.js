@@ -1156,6 +1156,26 @@
             date.dateTime = item.createdAt || '';
             date.textContent = notificationDate(item.createdAt);
             row.append(title, body, date);
+            if (item.employeeId) {
+                row.tabIndex = 0;
+                row.setAttribute('role', 'button');
+                const openEmployee = () => {
+                    const pinned = state.pinnedEmployees.find((person) => person.employeeId === item.employeeId);
+                    void openEmployeeViolations({
+                        employeeId: item.employeeId,
+                        fullName: pinned?.fullName || 'ID ' + item.employeeId,
+                        count: 0,
+                        totalTaskPrice: 0,
+                    }, false);
+                };
+                row.addEventListener('click', openEmployee);
+                row.addEventListener('keydown', (event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        openEmployee();
+                    }
+                });
+            }
             list.appendChild(row);
         });
     }
@@ -1165,12 +1185,13 @@
         try {
             const { data, error } = await supabaseClient
                 .from('wms_mobile_notifications')
-                .select('id,title,body,created_at,read_at')
+                .select('id,employee_id,title,body,created_at,read_at')
                 .order('created_at', { ascending: false })
                 .limit(60);
             if (error) throw error;
             state.notifications = (data || []).map((item) => ({
                 id: item.id,
+                employeeId: String(item.employee_id || '').trim(),
                 title: String(item.title || '').trim() || 'WMS+',
                 body: String(item.body || '').trim(),
                 createdAt: item.created_at,
