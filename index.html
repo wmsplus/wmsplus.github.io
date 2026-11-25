@@ -634,8 +634,8 @@
     .period-switch button.is-active { background: #fff; color: var(--accent); box-shadow: 0 2px 8px rgba(36,32,56,.12); }
     .pinned-employees-btn { flex: 0 0 auto; border: 0; border-radius: 999px; padding: 9px 11px; background: #eee9ff; color: var(--accent); font: inherit; font-size: 12px; font-weight: 850; cursor: pointer; }
     .pinned-employees-btn:active { transform: scale(.96); background: #e4dcff; }
-    #screenInventory { justify-content: flex-start; padding-top: calc(82px + env(safe-area-inset-top)); padding-bottom: calc(18px + env(safe-area-inset-bottom)); }
-    #screenInventory .inventory-card { height: 100%; max-height: none; display: flex; flex-direction: column; padding: 20px; text-align: center; }
+    #screenInventory { justify-content: center; padding-top: calc(85px + env(safe-area-inset-top)); padding-bottom: calc(44px + env(safe-area-inset-bottom)); }
+    #screenInventory .inventory-card { height: auto; max-height: 100%; display: flex; flex-direction: column; padding: 22px; text-align: center; }
     #screenInventory .inventory-card > h1 { flex: 0 0 auto; min-height: 48px; margin-bottom: 10px; display: grid; place-items: center; }
     #stepMsg { flex: 0 0 auto; min-height: 38px; display: grid; place-items: center; }
     .inventory-card.is-step-transition > h1,
@@ -665,8 +665,22 @@
     .inventory-card.is-scan-error { animation: box-scan-error .38s ease-out; }
     .inventory-card.is-complete { animation: inventory-complete .85s cubic-bezier(.18,.85,.25,1); }
     @keyframes inventory-complete { 0% { transform: scale(1); } 40% { transform: scale(1.025); box-shadow: 0 0 0 18px rgba(16,185,129,.13); } 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(16,185,129,0); } }
-    .inventory-step-buttons { flex: 0 0 auto; display: flex; flex-direction: column; gap: 8px; margin-top: auto; }
+    .inventory-step-buttons { flex: 0 0 auto; display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
     .inventory-finish-btn { margin: 0; min-height: 42px; color: #b42334; border-color: rgba(220,38,38,.28); background: #fff6f6; }
+    .inventory-date-label { display: block; margin: 0 0 7px; color: rgba(36,32,56,.68); font-size: 13px; font-weight: 750; text-align: center; }
+    .inventory-date-field { width: min(100%, 280px); margin: 0 auto; text-align: center; }
+    .inventory-shift-switch { display: grid; grid-template-columns: 1fr 1fr; width: min(100%, 280px); margin: 2px auto 0; padding: 3px; border-radius: 999px; background: #eee9ff; }
+    .inventory-shift-switch button { border: 0; border-radius: 999px; padding: 10px 8px; background: transparent; color: rgba(36,32,56,.56); font: inherit; font-size: 13px; font-weight: 850; cursor: pointer; }
+    .inventory-shift-switch button.is-active { background: #fff; color: var(--accent); box-shadow: 0 2px 8px rgba(36,32,56,.12); }
+    .inventory-shift-switch button:disabled { opacity: .45; cursor: default; }
+    .inventory-dialog { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 24px; background: rgba(25,20,48,.4); backdrop-filter: blur(8px); }
+    .inventory-dialog[hidden] { display: none; }
+    .inventory-dialog-card { width: min(100%, 360px); padding: 24px; border-radius: 24px; background: #fff; box-shadow: 0 22px 56px rgba(25,20,48,.3); text-align: center; animation: inventory-dialog-in .3s cubic-bezier(.22,.9,.28,1) both; }
+    .inventory-dialog-card h2 { margin: 0 0 8px; color: var(--muted); font-size: 20px; }
+    .inventory-dialog-card p { margin: 0 0 18px; color: rgba(36,32,56,.63); font-size: 14px; line-height: 1.4; }
+    .inventory-dialog-actions { display: grid; grid-template-columns: 1fr 1.25fr; gap: 8px; }
+    .inventory-dialog-actions .primary-btn, .inventory-dialog-actions .secondary-btn { margin: 0; }
+    @keyframes inventory-dialog-in { from { opacity: 0; transform: translateY(14px) scale(.94); } to { opacity: 1; transform: translateY(0) scale(1); } }
     .violators-list { display: grid; width: 100%; min-width: 0; gap: 8px; }
     .violator-row {
         width: 100%;
@@ -875,6 +889,18 @@
         <span>Проверяем доступ…</span>
     </div>
 </section>
+
+<div id="inventoryFinishDialog" class="inventory-dialog" hidden role="dialog" aria-modal="true" aria-labelledby="inventoryFinishDialogTitle">
+    <div class="inventory-dialog-card">
+        <div class="placeholder-icon" aria-hidden="true">🏁</div>
+        <h2 id="inventoryFinishDialogTitle">Завершить инвентаризацию?</h2>
+        <p>Уже отсканированные короба сохранятся. Незавершённая полка останется в текущем состоянии.</p>
+        <div class="inventory-dialog-actions">
+            <button id="inventoryFinishCancelBtn" class="secondary-btn" type="button">Продолжить</button>
+            <button id="inventoryFinishConfirmBtn" class="primary-btn" type="button">Завершить</button>
+        </div>
+    </div>
+</div>
 
 <section id="screenAuth" class="screen auth-screen">
     <div class="screen-card auth-card">

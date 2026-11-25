@@ -76,6 +76,9 @@ window.WmsInventoryModule = (function () {
     const inventoryShelfName = document.getElementById("inventoryShelfName");
     const inventoryShelfCount = document.getElementById("inventoryShelfCount");
     const inventoryShelfBoxes = document.getElementById("inventoryShelfBoxes");
+    const inventoryFinishDialog = document.getElementById("inventoryFinishDialog");
+    const inventoryFinishCancelBtn = document.getElementById("inventoryFinishCancelBtn");
+    const inventoryFinishConfirmBtn = document.getElementById("inventoryFinishConfirmBtn");
 
     let activeSession = null;
     let scanStream = null;
@@ -94,9 +97,22 @@ window.WmsInventoryModule = (function () {
     function animateStepChange() {
         const card = document.querySelector(".inventory-card");
         if (!card) return;
+        const fromHeight = card.getBoundingClientRect().height;
         card.classList.remove("is-step-transition");
         void card.offsetWidth;
         card.classList.add("is-step-transition");
+        // The card stays content-sized, but its visual height eases between
+        // inventory steps instead of snapping when the camera or controls
+        // appear/disappear.
+        requestAnimationFrame(() => {
+            const toHeight = card.getBoundingClientRect().height;
+            if (Math.abs(toHeight - fromHeight) > 1 && typeof card.animate === "function") {
+                card.animate(
+                    [{ height: fromHeight + "px" }, { height: toHeight + "px" }],
+                    { duration: 280, easing: "cubic-bezier(.22,.8,.32,1)" }
+                );
+            }
+        });
     }
 
     // ---------- Reusable camera scanner (shelf codes here, box codes in
@@ -290,7 +306,7 @@ window.WmsInventoryModule = (function () {
     function resetShelfVisual(shelf) {
         if (!inventoryShelf || !inventoryShelfBoxes) return;
         inventoryShelf.hidden = false;
-        inventoryShelfName.textContent = "Полка " + (shelf.name || "");
+        inventoryShelfName.textContent = shelf.name || "Полка";
         inventoryShelfBoxes.replaceChildren();
         updateShelfVisualCount(0, shelf.capacity || 0);
     }
@@ -594,7 +610,6 @@ window.WmsInventoryModule = (function () {
         // these buttons (see the module-level declaration above).
         shelfFinishBtn = finishBtn;
         shelfMissingBtn = missingBtn;
-        appendEarlyFinishButton();
     }
 
     function appendEarlyFinishButton() {
@@ -610,7 +625,7 @@ window.WmsInventoryModule = (function () {
     }
 
     async function finishInventoryEarly(button) {
-        const confirmed = window.confirm("Завершить инвентаризацию сейчас? Уже отсканированные короба сохранятся.");
+        const confirmed = await confirmInventoryFinish();
         if (!confirmed) { button.disabled = false; return; }
         stopScanner();
         stepButtons.replaceChildren();
@@ -628,6 +643,23 @@ window.WmsInventoryModule = (function () {
             return;
         }
         void showCompletion();
+    }
+
+    function confirmInventoryFinish() {
+        if (!inventoryFinishDialog || !inventoryFinishCancelBtn || !inventoryFinishConfirmBtn) {
+            return Promise.resolve(false);
+        }
+        inventoryFinishDialog.hidden = false;
+        return new Promise((resolve) => {
+            const close = (answer) => {
+                inventoryFinishDialog.hidden = true;
+                inventoryFinishCancelBtn.onclick = null;
+                inventoryFinishConfirmBtn.onclick = null;
+                resolve(answer);
+            };
+            inventoryFinishCancelBtn.onclick = () => close(false);
+            inventoryFinishConfirmBtn.onclick = () => close(true);
+        });
     }
 
     // Shared by the QR scanner's onMatch AND (formerly) the manual-entry
@@ -744,34 +776,40 @@ window.WmsInventoryModule = (function () {
         stepMsg.textContent = "Выберите дату и смену";
         stepButtons.innerHTML = "";
 
+        const dateLabel = document.createElement("label");
+        dateLabel.className = "inventory-date-label";
+        dateLabel.htmlFor = "inventoryMissingStickerDate";
+        dateLabel.textContent = "Выберите дату";
+        stepButtons.appendChild(dateLabel);
+
         const dateInput = document.createElement("input");
+        dateInput.id = "inventoryMissingStickerDate";
         dateInput.type = "date";
-        dateInput.className = "field";
-        // Left empty (not defaulted to today) on purpose -- the shift
-        // buttons below only appear once the worker actually picks a date,
-        // via the dateInput 'change' listener below.
-        dateInput.style.marginBottom = "10px";
+        dateInput.className = "field inventory-date-field";
+        // Left empty (not defaulted to today) on purpose: the worker first
+        // consciously chooses the date, then the compact shift switch.
         stepButtons.appendChild(dateInput);
 
-        // Hidden until a date is actually picked -- showing both shift
-        // buttons up front, before the worker has chosen a date, invited
-        // tapping one before the date field was even touched.
+        const shiftSwitch = document.createElement("div");
+        shiftSwitch.className = "inventory-shift-switch";
         const dayBtn = document.createElement("button");
-        dayBtn.className = "primary-btn inventory-action-btn";
-        dayBtn.textContent = "Короб День";
-        dayBtn.style.display = "none";
-        stepButtons.appendChild(dayBtn);
+        dayBtn.type = "button";
+        dayBtn.textContent = "День";
+        dayBtn.disabled = true;
+        shiftSwitch.appendChild(dayBtn);
 
         const nightBtn = document.createElement("button");
-        nightBtn.className = "primary-btn inventory-action-btn";
-        nightBtn.textContent = "Короб Ночь";
-        nightBtn.style.display = "none";
-        stepButtons.appendChild(nightBtn);
+        nightBtn.type = "button";
+        nightBtn.textContent = "Ночь";
+        nightBtn.disabled = true;
+        shiftSwitch.appendChild(nightBtn);
+        stepButtons.appendChild(shiftSwitch);
 
         dateInput.addEventListener("change", () => {
-            const show = Boolean(dateInput.value);
-            dayBtn.style.display = show ? "" : "none";
-            nightBtn.style.display = show ? "" : "none";
+            const enabled = Boolean(dateInput.value);
+            dayBtn.disabled = !enabled;
+            nightBtn.disabled = !enabled;
+            if (enabled) stepMsg.textContent = "Выберите смену";
         });
 
         function pick(shiftType) {
@@ -779,6 +817,8 @@ window.WmsInventoryModule = (function () {
             if (!dateInput.value) { stepMsg.textContent = "Выберите дату"; return; }
             dayBtn.disabled = true;
             nightBtn.disabled = true;
+            dayBtn.classList.toggle("is-active", shiftType === "Дневная");
+            nightBtn.classList.toggle("is-active", shiftType === "Ночная");
             void handleMissingStickerDateShift(dateInput.value, shiftType).finally(() => {
                 dayBtn.disabled = false;
                 nightBtn.disabled = false;
