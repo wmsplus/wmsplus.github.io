@@ -91,6 +91,14 @@ window.WmsInventoryModule = (function () {
     let lastScanErrorAt = 0;
     let autoAdvancingShelf = false;
 
+    function animateStepChange() {
+        const card = document.querySelector(".inventory-card");
+        if (!card) return;
+        card.classList.remove("is-step-transition");
+        void card.offsetWidth;
+        card.classList.add("is-step-transition");
+    }
+
     // ---------- Reusable camera scanner (shelf codes here, box codes in
     // Task 6, pairing code below) -- mirrors intake.js's
     // startCloseQrScan/scanCloseQrFrame pattern (wmsplus-intake-form repo).
@@ -372,6 +380,7 @@ window.WmsInventoryModule = (function () {
     function renderStartScreen() {
         activeSession = null;
         hideShelfVisual();
+        animateStepChange();
         stepTitle.textContent = "Инвентаризация «Без ШК»";
         stepMsg.textContent = "";
         stepButtons.innerHTML = "";
@@ -407,6 +416,7 @@ window.WmsInventoryModule = (function () {
             return;
         }
         activeSession = { id: data.id };
+        animateStepChange();
         stepTitle.textContent = "Отсканируйте QR на экране";
         stepMsg.textContent = "Экран в кабинете ОПП";
         stepButtons.replaceChildren();
@@ -423,6 +433,8 @@ window.WmsInventoryModule = (function () {
     async function resumeSession(session) {
         activeSession = { id: session.id, shelfId: session.current_shelf_id || null };
         if (session.step === "pairing") {
+            hideShelfVisual();
+            animateStepChange();
             stepTitle.textContent = "Отсканируйте QR на экране";
             stepMsg.textContent = "Экран в кабинете ОПП";
             stepButtons.replaceChildren();
@@ -478,9 +490,11 @@ window.WmsInventoryModule = (function () {
     async function startShelfScan() {
         hideShelfVisual();
         autoAdvancingShelf = false;
+        animateStepChange();
         stepTitle.textContent = "Отсканируйте полку";
         stepMsg.textContent = "";
         stepButtons.innerHTML = "";
+        appendEarlyFinishButton();
         const { error: resetStepError } = await supabaseClient
             .from("wms_no_shk_inventory_sessions")
             .update({ step: "scan_shelf", current_shelf_id: null, last_activity_at: new Date().toISOString() })
@@ -580,6 +594,40 @@ window.WmsInventoryModule = (function () {
         // these buttons (see the module-level declaration above).
         shelfFinishBtn = finishBtn;
         shelfMissingBtn = missingBtn;
+        appendEarlyFinishButton();
+    }
+
+    function appendEarlyFinishButton() {
+        const finishInventoryBtn = document.createElement("button");
+        finishInventoryBtn.type = "button";
+        finishInventoryBtn.className = "secondary-btn inventory-finish-btn";
+        finishInventoryBtn.textContent = "Завершить инвентаризацию";
+        finishInventoryBtn.addEventListener("click", () => {
+            finishInventoryBtn.disabled = true;
+            void finishInventoryEarly(finishInventoryBtn);
+        });
+        stepButtons.appendChild(finishInventoryBtn);
+    }
+
+    async function finishInventoryEarly(button) {
+        const confirmed = window.confirm("Завершить инвентаризацию сейчас? Уже отсканированные короба сохранятся.");
+        if (!confirmed) { button.disabled = false; return; }
+        stopScanner();
+        stepButtons.replaceChildren();
+        stepMsg.textContent = "Завершаем инвентаризацию…";
+        const { error } = await supabaseClient
+            .from("wms_no_shk_inventory_sessions")
+            .update({ status: "completed", step: "completed", finished_at: new Date().toISOString(), last_activity_at: new Date().toISOString() })
+            .eq("id", activeSession.id);
+        if (error) {
+            stepMsg.textContent = "Не удалось завершить: " + error.message;
+            button.disabled = false;
+            stepButtons.appendChild(button);
+            if (activeSession.shelf) void startBoxScan(activeSession.shelf, stepMsg.textContent);
+            else void startShelfScan();
+            return;
+        }
+        void showCompletion();
     }
 
     // Shared by the QR scanner's onMatch AND (formerly) the manual-entry
@@ -660,6 +708,7 @@ window.WmsInventoryModule = (function () {
     }
 
     async function startBoxScan(shelf, statusMsg) {
+        animateStepChange();
         stepTitle.textContent = "Отсканируйте все короба на полке слева направо";
         stepMsg.textContent = statusMsg || shelf.name;
         autoAdvancingShelf = false;
@@ -690,6 +739,7 @@ window.WmsInventoryModule = (function () {
     // spot (box_number is a DB identity column -- auto-assigned).
     function openMissingStickerCalendar() {
         stopScanner();
+        animateStepChange();
         stepTitle.textContent = "Короб без наклейки";
         stepMsg.textContent = "Выберите дату и смену";
         stepButtons.innerHTML = "";
@@ -944,6 +994,7 @@ window.WmsInventoryModule = (function () {
         stepButtons.innerHTML = "";
         video.style.display = "none";
         hideShelfVisual();
+        animateStepChange();
         const card = document.querySelector(".inventory-card");
         if (card) {
             card.classList.remove("is-complete");
