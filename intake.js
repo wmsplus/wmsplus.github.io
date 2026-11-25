@@ -770,7 +770,7 @@
             showScreen(state.pendingScreen);
             if (state.pendingScreen === 'screenInventory') startInventoryModule();
             if (state.pendingScreen === 'screenViolations') void loadWeeklyViolators(true);
-            if (state.pendingScreen === 'screenNotificationInbox') void loadNotifications(true);
+            if (state.pendingScreen === 'screenNotificationInbox') void loadNotifications();
         }
     }
 
@@ -966,6 +966,66 @@
         return parts[0] + ' ' + parts.slice(1).map((part) => part ? part[0] + '.' : '').join(' ');
     }
 
+    function detailViolationType(item) {
+        const type = String(item?.violation_type || '').trim();
+        const comment = String(item?.comment || '').trim();
+        return type.toLocaleLowerCase('ru-RU') === 'другое' && comment ? comment : (type || '—');
+    }
+
+    function violationShks(value) {
+        return String(value || '')
+            .split(/[,;\n]+/)
+            .map((item) => item.trim())
+            .filter(Boolean);
+    }
+
+    function compactViolationShks(item) {
+        if (item?.displayShk) return item.displayShk;
+        const shks = violationShks(item?.shk);
+        return shks.length ? shks.join(', ') : '—';
+    }
+
+    async function addCompactShkLabels(rows) {
+        const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        const longRows = rows.filter((row) => violationShks(row.shk).length > 3);
+        const taskIds = [...new Set(longRows.map((row) => String(row.task_id || '').trim()).filter((id) => UUID_RE.test(id)))];
+        const pricesByTask = new Map();
+        if (taskIds.length) {
+            const { data, error } = await supabaseClient
+                .from('wms_task_items')
+                .select('task_id,shk,price')
+                .in('task_id', taskIds);
+            if (error) {
+                // A compact fallback is still preferable to an unreadable,
+                // long line if a historic task has already been archived.
+                console.warn('task item prices load failed:', error);
+            } else {
+                (data || []).forEach((taskItem) => {
+                    const taskId = String(taskItem.task_id || '');
+                    const shk = String(taskItem.shk || '').trim();
+                    if (!taskId || !shk) return;
+                    if (!pricesByTask.has(taskId)) pricesByTask.set(taskId, new Map());
+                    pricesByTask.get(taskId).set(shk, Number(taskItem.price) || 0);
+                });
+            }
+        }
+        rows.forEach((row) => {
+            const shks = violationShks(row.shk);
+            if (shks.length <= 3) {
+                row.displayShk = shks.length ? shks.join(', ') : '—';
+                return;
+            }
+            const priceByShk = pricesByTask.get(String(row.task_id || '').trim()) || new Map();
+            const topThree = shks
+                .map((shk, index) => ({ shk, index, price: Number(priceByShk.get(shk)) || 0 }))
+                .sort((left, right) => right.price - left.price || left.index - right.index)
+                .slice(0, 3)
+                .map((item) => item.shk);
+            row.displayShk = topThree.join(', ') + ' +' + (shks.length - topThree.length) + ' ШК';
+        });
+        return rows;
+    }
+
     function latestTalkCutoff() {
         return state.violations.talks.reduce((latest, talk) => {
             const time = new Date(talk.covered_until).getTime();
@@ -1046,8 +1106,8 @@
             row.classList.toggle('is-discussed', isDiscussedViolation(item));
             [
                 formatViolationDate(item.created_at),
-                item.violation_type || '—',
-                item.shk || '—',
+                detailViolationType(item),
+                compactViolationShks(item),
             ].forEach((value) => {
                 const cell = document.createElement('td');
                 cell.textContent = value;
@@ -1075,7 +1135,7 @@
         try {
             let query = supabaseClient
                 .from('wms_violations')
-                .select('created_at,violation_type,shk,task_price')
+                .select('created_at,violation_type,comment,shk,task_id,task_price')
                 .gte('created_at', from)
                 .order('created_at', { ascending: false })
                 .limit(1000);
@@ -1093,7 +1153,7 @@
             if (violationsResult.error) throw violationsResult.error;
             if (talksResult.error) throw talksResult.error;
             if (pinResult.error) throw pinResult.error;
-            state.violations.detailRows = violationsResult.data || [];
+            state.violations.detailRows = await addCompactShkLabels(violationsResult.data || []);
             const followUp = Array.isArray(talksResult.data) ? talksResult.data[0] : null;
             state.violations.talks = followUp?.covered_until ? [{ covered_until: followUp.covered_until }] : [];
             state.violations.talkCount30 = Number(followUp?.talk_count_30) || 0;
@@ -1147,7 +1207,7 @@
         }
         state.notifications.forEach((item) => {
             const row = document.createElement('article');
-            row.className = 'inbox-notification' + (item.readAt ? '' : ' is-unread');
+            row.className = 'inbox-notification ' + (item.readAt ? 'is-read' : 'is-unread');
             const title = document.createElement('strong');
             title.textContent = item.title;
             const body = document.createElement('p');
@@ -1160,6 +1220,7 @@
                 row.tabIndex = 0;
                 row.setAttribute('role', 'button');
                 const openEmployee = () => {
+                    void markNotificationRead(item);
                     const pinned = state.pinnedEmployees.find((person) => person.employeeId === item.employeeId);
                     void openEmployeeViolations({
                         employeeId: item.employeeId,
@@ -1180,7 +1241,24 @@
         });
     }
 
-    async function loadNotifications(markRead) {
+    async function markNotificationRead(item) {
+        if (!item || item.readAt) return;
+        const previousReadAt = item.readAt;
+        const readAt = new Date().toISOString();
+        item.readAt = readAt;
+        renderNotifications();
+        const { error } = await supabaseClient
+            .from('wms_mobile_notifications')
+            .update({ read_at: readAt })
+            .eq('id', item.id);
+        if (error) {
+            item.readAt = previousReadAt;
+            renderNotifications();
+            console.warn('notification read state update failed:', error);
+        }
+    }
+
+    async function loadNotifications() {
         if (!state.user?.authUid) return;
         try {
             const { data, error } = await supabaseClient
@@ -1198,17 +1276,6 @@
                 readAt: item.read_at,
             }));
             renderNotifications();
-            if (markRead) {
-                const unreadIds = state.notifications.filter((item) => !item.readAt).map((item) => item.id);
-                if (unreadIds.length) {
-                    const readAt = new Date().toISOString();
-                    const { error: updateError } = await supabaseClient
-                        .from('wms_mobile_notifications')
-                        .update({ read_at: readAt })
-                        .in('id', unreadIds);
-                    if (!updateError) state.notifications.forEach((item) => { if (!item.readAt) item.readAt = readAt; });
-                }
-            }
         } catch (error) {
             console.warn('mobile notifications load failed:', error);
             state.notifications = [];
