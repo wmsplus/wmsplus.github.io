@@ -43,9 +43,38 @@
     // permission is always backed by the live Supabase session.
     const LS_MOBILE_USER = 'wmsplus_mobile_auth_user';
     const LS_AREA = 'wmsplus_intake_area';
+    const MOBILE_APP_ACCESS = 'mobile_app';
+    const MOBILE_PROBLEM_ITEM_ACCESS = 'mobile_problem_item';
+    const MOBILE_VIOLATIONS_ACCESS = 'mobile_violations';
+    const MOBILE_PASSES_ACCESS = 'mobile_passes';
+    const MOBILE_INVENTORY_ACCESS = 'mobile_inventory';
+    const MOBILE_SCREEN_ACCESS = {
+        screenEntryType: MOBILE_PROBLEM_ITEM_ACCESS,
+        screenItemType: MOBILE_PROBLEM_ITEM_ACCESS,
+        screen2Shk: MOBILE_PROBLEM_ITEM_ACCESS,
+        screenEmptyPackage: MOBILE_PROBLEM_ITEM_ACCESS,
+        screenCategory: MOBILE_PROBLEM_ITEM_ACCESS,
+        screenItemName: MOBILE_PROBLEM_ITEM_ACCESS,
+        screenPhoto: MOBILE_PROBLEM_ITEM_ACCESS,
+        screenStickerScan: MOBILE_PROBLEM_ITEM_ACCESS,
+        screenStickerSaved: MOBILE_PROBLEM_ITEM_ACCESS,
+        screenInstrSlide: MOBILE_PROBLEM_ITEM_ACCESS,
+        screenTakeToHub: MOBILE_PROBLEM_ITEM_ACCESS,
+        screenShiftCloseList: MOBILE_PROBLEM_ITEM_ACCESS,
+        screenShiftClose: MOBILE_PROBLEM_ITEM_ACCESS,
+        screenShiftCloseQr: MOBILE_PROBLEM_ITEM_ACCESS,
+        screenShiftClosePrint: MOBILE_PROBLEM_ITEM_ACCESS,
+        screenSuccess: MOBILE_PROBLEM_ITEM_ACCESS,
+        screenViolations: MOBILE_VIOLATIONS_ACCESS,
+        screenEmployeeViolations: MOBILE_VIOLATIONS_ACCESS,
+        screenPinnedEmployees: MOBILE_VIOLATIONS_ACCESS,
+        screenPasses: MOBILE_PASSES_ACCESS,
+        screenInventory: MOBILE_INVENTORY_ACCESS,
+    };
 
     const screens = Array.from(document.querySelectorAll('.screen'));
     function showScreen(id) {
+        if (id !== 'screenInventory' && window.WmsInventoryModule) window.WmsInventoryModule.close();
         screens.forEach((s) => s.classList.toggle('is-active', s.id === id));
         updateBottomNavigation(id);
         updateNotificationBell(id);
@@ -65,10 +94,11 @@
         const loggedIn = Boolean(state && state.user);
         // Once a "Без ШК" name is confirmed, the worker must finish the
         // active fixation before leaving for another main section.
-        nav.hidden = !loggedIn || screenId === 'screenAuth' || Boolean(state.noShkFixationLocked);
+        nav.hidden = !loggedIn || !hasMobileAppAccess() || screenId === 'screenAuth' || screenId === 'screenMobileAccessDenied' || screenId === 'screenInventory' || Boolean(state.noShkFixationLocked);
         if (nav.hidden) return;
         const activeTab = mobileTabForScreen(screenId);
-        const tabIndex = { home: 0, violations: 1, profile: 2 }[activeTab] || 0;
+        const visibleTabs = Array.from(nav.querySelectorAll('[data-mobile-tab]')).filter((button) => !button.hidden);
+        const tabIndex = Math.max(0, visibleTabs.findIndex((button) => button.dataset.mobileTab === activeTab));
         nav.style.setProperty('--tab-index', String(tabIndex));
         nav.querySelectorAll('[data-mobile-tab]').forEach((button) => {
             const active = button.dataset.mobileTab === activeTab;
@@ -82,7 +112,7 @@
         const bell = document.getElementById('notificationBellBtn');
         if (!bell) return;
         const dashboardScreens = new Set(['screenHome', 'screenViolations', 'screenProfile']);
-        bell.hidden = !state.user || state.noShkFixationLocked || !dashboardScreens.has(screenId);
+        bell.hidden = !state.user || !hasMobileAppAccess() || state.noShkFixationLocked || !dashboardScreens.has(screenId);
     }
 
     // Упаковка has no shift-box concept (every item there is bucketed,
@@ -517,6 +547,19 @@
             .filter(Boolean);
     }
 
+    function hasMobileAppAccess() {
+        return state.accesses.includes(MOBILE_APP_ACCESS);
+    }
+
+    function hasMobileFeatureAccess(access) {
+        return hasMobileAppAccess() && state.accesses.includes(access);
+    }
+
+    function screenAccessAllowed(screenId) {
+        const requiredAccess = MOBILE_SCREEN_ACCESS[screenId];
+        return !requiredAccess || hasMobileFeatureAccess(requiredAccess);
+    }
+
     function applyProfile(profile) {
         const mobileUser = {
             id: String(profile.id || '').trim(),
@@ -550,11 +593,18 @@
     }
 
     function applyRoleAccess() {
+        const problemItem = document.getElementById('openProblemItemBtn');
         const passes = document.getElementById('openPassesBtn');
-        // A verified WMS+ profile is the baseline permission for the mobile
-        // workplace.  `accesses` stays loaded into state for future granular
-        // capabilities, but it must never hide the staff services by default.
-        if (passes) passes.hidden = false;
+        const inventory = document.getElementById('openInventoryBtn');
+        const tabbar = document.getElementById('mobileTabbar');
+        const violationsTab = document.querySelector('[data-mobile-tab="violations"]');
+        if (problemItem) problemItem.hidden = !hasMobileFeatureAccess(MOBILE_PROBLEM_ITEM_ACCESS);
+        if (passes) passes.hidden = !hasMobileFeatureAccess(MOBILE_PASSES_ACCESS);
+        if (inventory) inventory.hidden = !hasMobileFeatureAccess(MOBILE_INVENTORY_ACCESS);
+        if (violationsTab) violationsTab.hidden = !hasMobileFeatureAccess(MOBILE_VIOLATIONS_ACCESS);
+        if (tabbar) tabbar.classList.toggle('has-violations', Boolean(violationsTab && !violationsTab.hidden));
+        const activeScreen = screens.find((screen) => screen.classList.contains('is-active'))?.id || 'screenHome';
+        updateBottomNavigation(activeScreen);
     }
 
     async function loadProfileForSession(session) {
@@ -580,6 +630,10 @@
     async function showAuthenticatedStart() {
         if (!state.user) {
             showScreen('screenAuth');
+            return;
+        }
+        if (!hasMobileAppAccess()) {
+            showScreen('screenMobileAccessDenied');
             return;
         }
         if (!state.area) {
@@ -696,6 +750,13 @@
         state.pendingScreen = screenId || 'screenHome';
         if (!state.user || !state.employeeId || !state.fullName) {
             showScreen('screenAuth');
+        } else if (!hasMobileAppAccess()) {
+            showScreen('screenMobileAccessDenied');
+        } else if (!screenAccessAllowed(state.pendingScreen)) {
+            // Deep links and stale browser history must not open a feature
+            // after its mobile permission was revoked in SCUD.
+            state.pendingScreen = 'screenHome';
+            showScreen('screenHome');
         } else if (!state.area) {
             showScreen('screenArea');
         } else {
@@ -704,12 +765,31 @@
             updateHomeGreeting();
             updateProfileScreen();
             showScreen(state.pendingScreen);
+            if (state.pendingScreen === 'screenInventory') startInventoryModule();
             if (state.pendingScreen === 'screenViolations') void loadWeeklyViolators(true);
         }
     }
 
     function goToStart() {
         openProtectedScreen('screenEntryType');
+    }
+
+    function startInventoryModule() {
+        if (window.WmsInventoryModule) {
+            window.WmsInventoryModule.open({
+                supabaseClient,
+                user: { id: state.employeeId, name: state.fullName },
+                onExit: openHome,
+            });
+        }
+    }
+
+    function openInventory() {
+        if (!hasMobileFeatureAccess(MOBILE_INVENTORY_ACCESS)) {
+            openProtectedScreen('screenHome');
+            return;
+        }
+        openProtectedScreen('screenInventory');
     }
 
     // All top-level services live in the same document. Switching one of
@@ -723,6 +803,8 @@
 
     document.getElementById('openProblemItemBtn').addEventListener('click', goToStart);
     document.getElementById('openPassesBtn').addEventListener('click', () => openProtectedScreen('screenPasses'));
+    document.getElementById('openInventoryBtn').addEventListener('click', openInventory);
+    document.getElementById('backFromInventoryBtn').addEventListener('click', openHome);
     document.getElementById('openPinnedEmployeesBtn').addEventListener('click', () => openProtectedScreen('screenPinnedEmployees'));
     document.getElementById('backFromPinnedEmployeesBtn').addEventListener('click', () => openProtectedScreen('screenViolations'));
     document.getElementById('pushSetupBtn').addEventListener('click', () => { void enableOrTestPush(); });
@@ -1206,6 +1288,7 @@
     document.getElementById('profileLogoutBtn').addEventListener('click', () => {
         if (window.confirm('Выйти из аккаунта на этом устройстве?')) void signOut();
     });
+    document.getElementById('mobileAccessDeniedSignOutBtn').addEventListener('click', () => { void signOut(); });
     document.getElementById('profileChangeAreaBtn').addEventListener('click', () => {
         state.pendingScreen = 'screenProfile';
         showScreen('screenArea');

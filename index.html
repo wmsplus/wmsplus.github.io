@@ -394,6 +394,7 @@
         position: relative;
     }
     .home-bento-action::before { content: '📦'; position: absolute; top: 18px; right: 20px; font-size: 42px; filter: drop-shadow(0 8px 10px rgba(0,0,0,.15)); }
+    .home-bento-action[hidden], .home-bento-passes[hidden], .home-bento-inventory[hidden], .mobile-tab[hidden], .pinned-employees-btn[hidden] { display: none !important; }
     .home-bento-action:active { transform: scale(.985); }
     .home-bento-action-title { font-size: 25px; font-weight: 900; letter-spacing: -.035em; }
     .home-bento-action-note { color: rgba(255,255,255,.78); font-size: 13px; font-weight: 650; }
@@ -418,6 +419,27 @@
     .home-bento-passes strong { display: block; font-size: 16px; }
     .home-bento-passes small { display: block; margin-top: 3px; color: rgba(36,32,56,.57); font-size: 12px; font-weight: 650; }
     .home-bento-passes-arrow { margin-left: auto; color: var(--accent); font-size: 26px; line-height: 1; }
+    .home-bento-inventory {
+        grid-column: 1 / -1;
+        min-height: 82px;
+        display: flex;
+        align-items: center;
+        gap: 13px;
+        padding: 16px 18px;
+        border: 1px solid rgba(16,185,129,.22);
+        border-radius: 20px;
+        background: linear-gradient(135deg, rgba(236,253,245,.98), rgba(255,255,255,.94));
+        color: var(--muted);
+        box-shadow: 0 9px 24px rgba(16,185,129,.1);
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+    }
+    .home-bento-inventory:active { transform: scale(.985); }
+    .home-bento-inventory-icon { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 14px; background: #d1fae5; font-size: 22px; }
+    .home-bento-inventory strong { display: block; font-size: 16px; }
+    .home-bento-inventory small { display: block; margin-top: 3px; color: rgba(36,32,56,.57); font-size: 12px; font-weight: 650; }
+    .home-bento-inventory-arrow { margin-left: auto; color: #059669; font-size: 26px; line-height: 1; }
     .home-brand {
         display: flex;
         align-items: center;
@@ -534,6 +556,8 @@
         backdrop-filter: blur(18px) saturate(1.35);
         z-index: 30;
     }
+    .mobile-tabbar:not(.has-violations) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .mobile-tabbar:not(.has-violations) .mobile-tab-thumb { width: calc((100% - 10px) / 2); }
     .mobile-tabbar[hidden] { display: none; }
     .mobile-tab-thumb {
         position: absolute;
@@ -601,6 +625,12 @@
     .period-switch button.is-active { background: #fff; color: var(--accent); box-shadow: 0 2px 8px rgba(36,32,56,.12); }
     .pinned-employees-btn { flex: 0 0 auto; border: 0; border-radius: 999px; padding: 9px 11px; background: #eee9ff; color: var(--accent); font: inherit; font-size: 12px; font-weight: 850; cursor: pointer; }
     .pinned-employees-btn:active { transform: scale(.96); background: #e4dcff; }
+    .inventory-card { text-align: center; }
+    #scanFrame { display: none; position: relative; width: 100%; max-width: 260px; aspect-ratio: 1 / 1; margin: 0 auto 12px; border-radius: var(--radius-md); overflow: hidden; background: #000; }
+    #invVideo { position: absolute; top: 50%; left: 50%; width: 100%; height: 100%; object-fit: cover; transform: translate(-50%, -50%); }
+    #scanReticle { position: absolute; inset: 14%; border: 3px solid rgba(255,255,255,.9); border-radius: 14px; box-shadow: 0 0 0 9999px rgba(0,0,0,.32); pointer-events: none; }
+    @keyframes box-scan-success { 0% { box-shadow: 0 0 0 0 rgba(34,197,94,.55); } 70% { box-shadow: 0 0 0 22px rgba(34,197,94,0); } 100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); } }
+    .inventory-card.is-scan-success { animation: box-scan-success .6s ease-out; }
     .violators-list { display: grid; width: 100%; min-width: 0; gap: 8px; }
     .violator-row {
         width: 100%;
@@ -823,6 +853,15 @@
     </div>
 </section>
 
+<section id="screenMobileAccessDenied" class="screen auth-screen">
+    <div class="screen-card auth-card">
+        <div class="auth-mark">🔒</div>
+        <h1>Нет доступа</h1>
+        <p>Для входа в мобильный контур нужен доступ «Мобильное приложение». Обратитесь к руководителю смены.</p>
+        <button id="mobileAccessDeniedSignOutBtn" class="secondary-btn is-danger" type="button">Выйти из аккаунта</button>
+    </div>
+</section>
+
 <section id="screenHome" class="screen home-screen">
     <div class="home-card">
         <div class="home-bento-heading">
@@ -846,6 +885,11 @@
                 <span class="home-bento-passes-icon" aria-hidden="true">🪪</span>
                 <span><strong>Печать пропусков</strong><small>Подготовка пропуска сотрудника</small></span>
                 <span class="home-bento-passes-arrow" aria-hidden="true">›</span>
+            </button>
+            <button id="openInventoryBtn" class="home-bento-inventory" type="button">
+                <span class="home-bento-inventory-icon" aria-hidden="true">📋</span>
+                <span><strong>Инвентаризация</strong><small>Проверка коробов «Без ШК» по полкам</small></span>
+                <span class="home-bento-inventory-arrow" aria-hidden="true">›</span>
             </button>
         </div>
     </div>
@@ -954,6 +998,20 @@
         <div class="placeholder-icon">🪪</div>
         <h1>Печать пропусков</h1>
         <p style="margin:0 0 20px;font-size:14px;line-height:1.45;">Раздел готовится. Печать будет открываться здесь же, без новой вкладки.</p>
+    </div>
+</section>
+
+<section id="screenInventory" class="screen">
+    <button id="backFromInventoryBtn" class="back-btn" type="button" aria-label="На главную">←</button>
+    <div class="screen-card inventory-card">
+        <h1 id="stepTitle">Инвентаризация «Без ШК»</h1>
+        <p id="stepMsg" style="margin:0 0 16px;font-size:14px;color:#64748b;"></p>
+        <div id="scanFrame">
+            <video id="invVideo" playsinline muted></video>
+            <div id="scanReticle"></div>
+        </div>
+        <canvas id="invCanvas" style="display:none;"></canvas>
+        <div id="stepButtons" style="display:flex;flex-direction:column;gap:10px;margin-top:16px;"></div>
     </div>
 </section>
 
@@ -1174,6 +1232,8 @@
 
 <script src="shift-close.js"></script>
 <script src="print-tspl.js"></script>
+<script src="inventory-dates.js"></script>
+<script src="inventory-module.js"></script>
 <script src="intake.js"></script>
 </body>
 </html>
