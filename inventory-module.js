@@ -128,9 +128,8 @@ window.WmsInventoryModule = (function () {
             // only facingMode is given) doesn't carry enough detail for
             // jsQR to decode one reliably at normal scanning distance,
             // even though the same stream is plenty for the much larger
-            // shelf QR signs. 4:3 is the native preview ratio of most
-            // phone cameras and maps cleanly into our finder (without the
-            // black side gutters a square preview produced).
+            // shelf QR signs. We request a detailed stream, then map its
+            // actual ratio into the square finder below.
             const stream = await navigator.mediaDevices.getUserMedia({
                 video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 960 } },
             });
@@ -149,15 +148,23 @@ window.WmsInventoryModule = (function () {
         }
         video.srcObject = scanStream;
         await video.play();
-        // A few phones still return a portrait stream. Match the finder to
-        // the actual decoded frame rather than letterboxing it into 4:3.
-        const syncFinderRatio = () => {
-            if (scanFrame && video.videoWidth && video.videoHeight) {
-                scanFrame.classList.toggle("is-portrait-source", video.videoHeight > video.videoWidth);
+        // iOS can ignore object-fit for a live camera element and letterbox
+        // it inside a square. Size it explicitly from the decoded stream so
+        // the longer side covers the finder; overflow is intentionally
+        // cropped by #scanFrame, never shown as black side strips.
+        const fitVideoIntoSquareFinder = () => {
+            if (!video.videoWidth || !video.videoHeight) return;
+            const ratio = video.videoWidth / video.videoHeight;
+            if (ratio >= 1) {
+                video.style.width = (ratio * 100) + "%";
+                video.style.height = "100%";
+            } else {
+                video.style.width = "100%";
+                video.style.height = ((1 / ratio) * 100) + "%";
             }
         };
-        syncFinderRatio();
-        video.addEventListener("loadedmetadata", syncFinderRatio, { once: true });
+        fitVideoIntoSquareFinder();
+        video.addEventListener("loadedmetadata", fitVideoIntoSquareFinder, { once: true });
         // Best-effort continuous autofocus -- a close-up small QR code is
         // also where a phone camera's default (often single-shot/fixed)
         // focus is most likely to leave the frame permanently blurry.
