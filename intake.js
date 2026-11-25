@@ -213,6 +213,7 @@
         noShkFixationLocked: false,
         pendingScreen: 'screenHome',
         notificationReturnScreen: 'screenHome',
+        notifications: [],
         violations: {
             loading: false,
             error: '',
@@ -574,6 +575,7 @@
         localStorage.setItem(LS_MOBILE_USER, JSON.stringify(mobileUser));
         void refreshPushState();
         void loadPinnedEmployees();
+        void loadNotifications();
     }
 
     function clearProfile() {
@@ -590,6 +592,7 @@
         state.area = null;
         state.noShkFixationLocked = false;
         state.pinnedEmployees = [];
+        state.notifications = [];
     }
 
     function applyRoleAccess() {
@@ -767,6 +770,7 @@
             showScreen(state.pendingScreen);
             if (state.pendingScreen === 'screenInventory') startInventoryModule();
             if (state.pendingScreen === 'screenViolations') void loadWeeklyViolators(true);
+            if (state.pendingScreen === 'screenNotificationInbox') void loadNotifications(true);
         }
     }
 
@@ -887,7 +891,7 @@
             personWrap.append(name, id);
             const count = document.createElement('span');
             count.className = 'violator-count';
-            count.textContent = (person.isRepeatOffender ? '🔥 ' : '') + person.count + ' нар.';
+            count.textContent = (person.isRepeatOffender ? '🔥 ' : '') + person.count;
             row.append(rank, personWrap, count);
             row.style.animationDelay = Math.min(index, 7) * 45 + 'ms';
             row.addEventListener('click', () => { void openEmployeeViolations(person); });
@@ -1122,6 +1126,75 @@
         if (count) count.textContent = String(state.pinnedEmployees.length);
     }
 
+    function notificationDate(value) {
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return '';
+        return new Intl.DateTimeFormat('ru-RU', {
+            day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
+        }).format(date).replace(',', ' ·');
+    }
+
+    function renderNotifications() {
+        const list = document.getElementById('notificationInboxList');
+        if (!list) return;
+        list.replaceChildren();
+        if (!state.notifications.length) {
+            const empty = document.createElement('div');
+            empty.className = 'inbox-empty';
+            empty.innerHTML = '<span aria-hidden="true">✨</span><div>Пока нет новых уведомлений</div>';
+            list.appendChild(empty);
+            return;
+        }
+        state.notifications.forEach((item) => {
+            const row = document.createElement('article');
+            row.className = 'inbox-notification' + (item.readAt ? '' : ' is-unread');
+            const title = document.createElement('strong');
+            title.textContent = item.title;
+            const body = document.createElement('p');
+            body.textContent = item.body;
+            const date = document.createElement('time');
+            date.dateTime = item.createdAt || '';
+            date.textContent = notificationDate(item.createdAt);
+            row.append(title, body, date);
+            list.appendChild(row);
+        });
+    }
+
+    async function loadNotifications(markRead) {
+        if (!state.user?.authUid) return;
+        try {
+            const { data, error } = await supabaseClient
+                .from('wms_mobile_notifications')
+                .select('id,title,body,created_at,read_at')
+                .order('created_at', { ascending: false })
+                .limit(60);
+            if (error) throw error;
+            state.notifications = (data || []).map((item) => ({
+                id: item.id,
+                title: String(item.title || '').trim() || 'WMS+',
+                body: String(item.body || '').trim(),
+                createdAt: item.created_at,
+                readAt: item.read_at,
+            }));
+            renderNotifications();
+            if (markRead) {
+                const unreadIds = state.notifications.filter((item) => !item.readAt).map((item) => item.id);
+                if (unreadIds.length) {
+                    const readAt = new Date().toISOString();
+                    const { error: updateError } = await supabaseClient
+                        .from('wms_mobile_notifications')
+                        .update({ read_at: readAt })
+                        .in('id', unreadIds);
+                    if (!updateError) state.notifications.forEach((item) => { if (!item.readAt) item.readAt = readAt; });
+                }
+            }
+        } catch (error) {
+            console.warn('mobile notifications load failed:', error);
+            state.notifications = [];
+            renderNotifications();
+        }
+    }
+
     function renderPinnedEmployees() {
         const list = document.getElementById('pinnedEmployeesList');
         if (!list) return;
@@ -1141,7 +1214,7 @@
             row.querySelector('strong').textContent = compactEmployeeName(person.fullName);
             row.querySelector('small').textContent = 'ID ' + person.employeeId;
             const count = row.querySelector('.pinned-open-count');
-            count.textContent = person.openViolationCount ? person.openViolationCount + ' нар.' : 'Без новых';
+            count.textContent = String(person.openViolationCount);
             count.classList.toggle('is-clear', person.openViolationCount === 0);
             row.addEventListener('click', () => { void openEmployeeViolations({ ...person, count: 0, totalTaskPrice: 0 }, false); });
             list.appendChild(row);
@@ -2332,6 +2405,8 @@
             ? 'screenViolations'
             : window.location.hash === '#passes'
                 ? 'screenPasses'
+                : window.location.hash === '#notifications'
+                    ? 'screenNotificationInbox'
                 : 'screenHome';
         showScreen('screenBoot');
         try {
