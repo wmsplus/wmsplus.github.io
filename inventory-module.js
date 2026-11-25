@@ -128,11 +128,11 @@ window.WmsInventoryModule = (function () {
             // only facingMode is given) doesn't carry enough detail for
             // jsQR to decode one reliably at normal scanning distance,
             // even though the same stream is plenty for the much larger
-            // shelf QR signs. Asking for a bigger frame directly targets
-            // that gap; `ideal` (not exact/min) so it degrades gracefully
-            // on a camera that can't do 1280x720.
+            // shelf QR signs. 4:3 is the native preview ratio of most
+            // phone cameras and maps cleanly into our finder (without the
+            // black side gutters a square preview produced).
             const stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } },
+                video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 960 } },
             });
             // The worker may have returned to the application while the
             // browser was still asking for camera permission. Do not revive
@@ -149,6 +149,15 @@ window.WmsInventoryModule = (function () {
         }
         video.srcObject = scanStream;
         await video.play();
+        // A few phones still return a portrait stream. Match the finder to
+        // the actual decoded frame rather than letterboxing it into 4:3.
+        const syncFinderRatio = () => {
+            if (scanFrame && video.videoWidth && video.videoHeight) {
+                scanFrame.classList.toggle("is-portrait-source", video.videoHeight > video.videoWidth);
+            }
+        };
+        syncFinderRatio();
+        video.addEventListener("loadedmetadata", syncFinderRatio, { once: true });
         // Best-effort continuous autofocus -- a close-up small QR code is
         // also where a phone camera's default (often single-shot/fixed)
         // focus is most likely to leave the frame permanently blurry.

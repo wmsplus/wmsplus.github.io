@@ -656,8 +656,11 @@
     .inventory-shelf-box { flex: 0 0 52px; min-height: 43px; display: grid; place-items: center; padding: 5px; border: 1px solid rgba(36,32,56,.13); border-radius: 9px 9px 4px 4px; background: #fff; color: var(--muted); box-shadow: 0 5px 11px rgba(36,32,56,.1); font-size: 10px; font-weight: 850; animation: inventory-box-arrive .46s cubic-bezier(.18,.88,.28,1.25) both; }
     .inventory-shelf-box.is-missing { border-style: dashed; color: #956d00; background: #fff9e8; }
     @keyframes inventory-box-arrive { from { opacity: 0; transform: translateY(-24px) scale(.72) rotate(-4deg); } to { opacity: 1; transform: translateY(0) scale(1) rotate(0); } }
-    #scanFrame { flex: 0 0 auto; display: none; position: relative; width: min(100%, 200px); width: min(100%, 200px, 27dvh); aspect-ratio: 1 / 1; margin: 0 auto 10px; border-radius: var(--radius-md); overflow: hidden; background: #000; }
-    #invVideo { position: absolute; top: 50%; left: 50%; width: 100% !important; height: 100% !important; min-width: 100%; min-height: 100%; object-fit: cover !important; -webkit-object-fit: cover; transform: translate(-50%, -50%); background: #000; }
+    /* Most phone cameras expose a 4:3 preview. Matching the frame to the
+       source avoids the black gutters caused by squeezing it into a square. */
+    #scanFrame { flex: 0 0 auto; display: none; position: relative; width: min(100%, 300px, 42dvh); aspect-ratio: 4 / 3; margin: 0 auto 10px; border-radius: var(--radius-md); overflow: hidden; background: #000; transition: width .24s ease, aspect-ratio .24s ease; }
+    #scanFrame.is-portrait-source { width: min(100%, 260px, 38dvh); aspect-ratio: 3 / 4; }
+    #invVideo { position: absolute; inset: 0; display: block; width: 100% !important; height: 100% !important; object-fit: cover !important; -webkit-object-fit: cover; transform: scale(1.025); transform-origin: center; background: #000; }
     #scanReticle { position: absolute; inset: 14%; border: 3px solid rgba(255,255,255,.9); border-radius: 14px; box-shadow: 0 0 0 9999px rgba(0,0,0,.32); pointer-events: none; }
     @keyframes box-scan-success { 0% { box-shadow: 0 0 0 0 rgba(34,197,94,.55); } 70% { box-shadow: 0 0 0 22px rgba(34,197,94,0); } 100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); } }
     .inventory-card.is-scan-success { animation: box-scan-success .6s ease-out; }
